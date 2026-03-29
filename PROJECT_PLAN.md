@@ -173,7 +173,7 @@ CREATE VIRTUAL TABLE messages_fts USING fts5(
     content,
     role,
     conversation_id,
-    content=message
+    content=messages
 );
 CREATE TRIGGER messages_ai AFTER INSERT ON messages BEGIN
     INSERT INTO messages_fts(rowid, content, role, conversation_id)
@@ -181,11 +181,22 @@ CREATE TRIGGER messages_ai AFTER INSERT ON messages BEGIN
 END;
 ```
 
+**Module Boundaries (to avoid overlap):**
+- `src/app/`: app state machine, event loop, and command routing only (no widget rendering)
+- `src/app/tui/`: terminal bootstrap, frame scheduling, shared layout primitives
+- `src/ui/`: all presentational components (widgets, dialogs, markdown renderer, toasts, spinners)
+- `src/ollama`, `src/workspace`, `src/history`, `src/config`: pure domain/infrastructure modules with no terminal dependencies
+- Keep business logic in domain modules and pass view models into `src/ui/` to keep rendering deterministic and testable
+- Consolidation rule: new widgets go under `src/ui/` only; avoid splitting widget code between `src/app/tui/widgets` and `src/ui/components`
+
 **File Context Management:**
 - When a file is added to workspace context, read and hash its contents
 - Store file metadata (path, hash, last_modified) in a separate table
 - On each user message, include context files (either in system prompt or as separate user message)
 - Watch for file changes using `notify` crate; prompt user to reload context if changed
+- Apply safe defaults: exclude `.env*`, `*.pem`, `*.key`, `id_rsa*`, `.git/`, `node_modules/`, `target/`, and common binary artifacts
+- Enforce size guardrails (per-file and total context budget), with clear warnings when files are skipped
+- Require explicit confirmation before first send with newly added context files in a workspace
 
 ### 2. Chat Interface (WhatsApp-like)
 
@@ -225,9 +236,11 @@ END;
 - `Ctrl+O`: Add file to context
 - `Ctrl+S`: Search history
 - `Ctrl+P`: Switch model/preset
+- `Ctrl+L`: Refresh model list
 - `Ctrl+R`: Reload context (if files changed)
 - `Ctrl+Q`: Quit
-- `Enter`: Send message (if single line), newline (if multi-line mode)
+- `Enter`: Insert newline
+- `Ctrl+Enter`: Send message
 - `Esc`: Cancel current operation / close dialog
 - `↑/↓`: Scroll history
 - `PgUp/PgDn`: Page scroll
@@ -293,12 +306,74 @@ END;
 
 ## Implementation Phases
 
+**v1 Scope Lock (must ship before adding extras):**
+- In scope for v1.0: streaming chat, model listing, workspace CRUD, SQLite persistence, basic conversation history (list + reopen), safe file-context ingestion, and core keyboard UX
+- Explicitly out of scope for v1.0: image attachments, conversation branching, tool-call visualization, customizable keymap editor, and multiple theme packs
+- Rule: if a feature does not improve reliability/usability of the core chat loop, move it to post-v1 backlog
+
+**Quality Gates (start in Week 1):**
+- Pin toolchain with `rust-toolchain.toml` so CI and local dev use the same Rust version
+- Enforce local checks: `cargo fmt --all -- --check`, `cargo clippy --all-targets --all-features -- -D warnings`, and `cargo test`
+- Add PR CI gate in Week 1 (Linux fast path) for `fmt`, `clippy`, and `test`
+- Provide an optional pre-commit hook/install script so contributors run the same checks before push
+- Expand to cross-platform CI and release automation in Phase 5
+
+**Required Test Matrix (v1 ship blockers):**
+- Streaming parser tests: NDJSON chunking, partial lines, `done=true` termination, malformed-line tolerance, and cancel path
+- Ollama client integration tests: timeout, connection-refused behavior, and model-not-found error mapping
+- Persistence tests: schema creation/migration, workspace/conversation/message CRUD, foreign-key cascade delete, and FTS trigger updates
+- Context ingestion tests: glob exclusions, sensitive-file blocking, max file/total budget enforcement, and hash-based change detection
+- Input and command tests: keybinding resolution (`Enter` newline, `Ctrl+Enter` send), focus switching, and search/open flow
+- Model list cache tests: TTL behavior, manual refresh behavior, and stale-cache fallback on API failure
+- Smoke test: app boot, one mock chat round-trip, graceful shutdown without panic
+- Regression policy: every bug fix adds at least one reproducer test before merge
+
+**Concrete Test Layout (must-create files):**
+```text
+tests/
+  common/
+    mod.rs
+    mock_ollama.rs
+    temp_db.rs
+  smoke_boot.rs
+  streaming_parser.rs
+  ollama_client_errors.rs
+  model_cache.rs
+  input_keybindings.rs
+  persistence_crud.rs
+  persistence_fts.rs
+  context_ingestion.rs
+```
+
+**Current Scaffold Status (already created in repo):**
+- `tests/common/mod.rs`, `tests/common/mock_ollama.rs`, `tests/common/temp_db.rs`
+- `tests/smoke_boot.rs`, `tests/streaming_parser.rs`, `tests/ollama_client_errors.rs`
+- `tests/model_cache.rs`, `tests/input_keybindings.rs`, `tests/persistence_crud.rs`, `tests/persistence_fts.rs`, `tests/context_ingestion.rs`
+- Next required step: replace placeholder assertions with real behavior tests as each module is implemented
+
+**Test Ownership Map:**
+- `streaming_parser.rs`, `ollama_client_errors.rs`, `model_cache.rs` -> `src/ollama/*`
+- `persistence_crud.rs`, `persistence_fts.rs` -> `src/workspace/*` + `src/history/*`
+- `context_ingestion.rs` -> `src/workspace/context.rs`
+- `input_keybindings.rs`, `smoke_boot.rs` -> `src/app/*` + `src/ui/*`
+- `tests/common/*` is shared only and must stay deterministic (no real network calls)
+
+**CI Test Tiers:**
+- PR required (fast): `cargo test --lib`, `cargo test --test streaming_parser --test input_keybindings --test smoke_boot`
+- Nightly/merge required (full): `cargo test --all-targets --all-features`
+- Release required: full suite must pass on Linux, macOS, and Windows
+
 ### Phase 1: MVP (Week 1-2)
 
 **Goal:** Basic chat with TUI, no persistence
 
 **Deliverables:**
 - [x] Project structure, Cargo.toml with dependencies
+- [ ] Tooling baseline: `rust-toolchain.toml`, formatter/lint config, documented check commands
+- [ ] CI baseline: GitHub Actions workflow for `fmt`, `clippy`, and `test` on pull requests
+- [ ] Optional pre-commit hook setup (fmt + clippy + test)
+- [x] Scaffold required `tests/` layout and shared fixtures (`tests/common/mock_ollama.rs`, `tests/common/temp_db.rs`)
+- [ ] Must-have tests for MVP path (real assertions, non-placeholder): streaming parser, keybinding behavior, and startup smoke test
 - [ ] Ratatui TUI basics (init, event loop, render)
 - [ ] Simple layout: model selector + chat area + input
 - [ ] Connect to Ollama API (`http://localhost:11434/api/chat`)
@@ -322,6 +397,9 @@ fn main() {
 
 **Deliverables:**
 - [ ] SQLite schema, rusqlite integration
+- [ ] Migration and persistence tests (schema creation, inserts, query, cascade delete)
+- [ ] Add deterministic DB/FTS fixtures for persistence tests (no external state leakage)
+- [ ] Must-have tests for persistence path: FTS trigger correctness and context hash/change detection
 - [ ] Workspace manager (create, list, load, delete)
 - [ ] Save conversations to database
 - [ ] Load conversation history on startup
@@ -355,9 +433,9 @@ fn main() {
 - Theme customization (light/dark mode)
 - Sound notifications (on completion)
 
-### Phase 4: Advanced Features (Week 5)
+### Phase 4: Advanced Features (Post-v1 Backlog)
 
-**Goal:** Power user features
+**Goal:** Power user features after v1.0 ships
 
 **Deliverables:**
 - [ ] Full-text search (FTS5)
@@ -386,8 +464,9 @@ fn main() {
   - Keyboard shortcuts
   - Troubleshooting
 - [ ] CONTRIBUTING.md
-- [ ] CI/CD (GitHub Actions: test, lint, build)
-- [ ] Git hooks (pre-commit: fmt, clippy, test)
+- [ ] CI/CD release pipeline (cross-platform build matrix, artifacts, checksums, release upload)
+- [ ] Optional hook installer docs finalized for contributors
+- [ ] Release gate policy documented: no release unless required test matrix passes on CI
 - [ ] Changelog (auto-generated with git-cliff)
 - [ ] License (MIT/Apache 2.0 dual)
 
@@ -457,7 +536,7 @@ fn main() {
 
 **Implementation:**
 - Cache in memory with timestamp
-- Refresh on user request (`Ctrl+R`)
+- Refresh on user request (`Ctrl+L`)
 - Parse tags: `model:tag` format
 
 ---
@@ -481,7 +560,7 @@ Follow platform conventions:
 **Config Example (config.toml):**
 ```toml
 [ollama]
-url = "http://localhost:11434"  # Custom server
+url = "http://localhost:11434"  # v1 default (remote URL support is post-v1)
 timeout = 300  # seconds
 
 [ui]
@@ -490,16 +569,21 @@ show_timestamps = true
 bubble_style = "modern"  # or "classic"
 
 [keybindings]
-send = "Enter"
-multiline = "Ctrl+Enter"
+send = "Ctrl+Enter"
+multiline = "Enter"
 new_workspace = "Ctrl+N"
 search = "Ctrl+S"
 quit = "Ctrl+Q"
 
 [workspace]
 max_context_files = 10
-auto_reload_changes = true
+auto_reload_changes = false
 context_strategy = "files"  # "files" or "directory_tree"
+max_file_size_kb = 512
+max_total_context_kb = 2048
+block_sensitive_files = true
+confirm_new_context_on_first_send = true
+exclude_globs = [".env*", "*.pem", "*.key", "id_rsa*", ".git/**", "node_modules/**", "target/**", "*.png", "*.jpg", "*.zip", "*.exe"]
 ```
 
 ---
@@ -643,6 +727,11 @@ cargo install --path .
 
 ## Questions & Decisions Needed
 
+**Default decisions already locked for v1:**
+- Message input UX: `Enter` inserts newline, `Ctrl+Enter` sends
+- Context privacy: sensitive files blocked by default with explicit confirmation on first send
+- Advanced features (images, branching, tool-call UI) remain post-v1 backlog
+
 1. **Markdown rendering?**
    - Yes: add `comrak` or `pulldown-cmark` + `syntect` for syntax highlighting
    - No: plain text only (simpler, faster)
@@ -652,8 +741,8 @@ cargo install --path .
    - v2+: Yes, for multimodal models
 
 3. **Remote server URL?**
-   - v1: Localhost only (default)
-   - v2+: Allow custom URL in config
+   - Decision: v1 uses localhost default
+   - Post-v1: allow custom URL in config/UI
 
 4. **Theme customization?**
    - v1: Single theme (WhatsApp green)
