@@ -4,6 +4,26 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project follows Semantic Versioning.
 
+## [0.0.7] - 2026-03-29
+
+### Added
+- High-risk test coverage expansion to a total of **160 tests** (up from 100, net +60).
+- New migration compatibility suite: `tests/migration_matrix.rs` (10 tests) covering legacy schema repair, idempotent migration runs, trigger recreation, and post-migration CRUD/search/checkpoint smoke.
+- New concurrency safety suite: `tests/concurrency_safety.rs` (8 tests) covering concurrent message/session operations, checkpoint upserts, context upserts, path races, and lock-contention behavior.
+- New network reliability suite: `tests/network_reliability.rs` (10 tests) covering timeout mapping, abrupt disconnects, malformed stream chunks, slow-response budget handling, and callback sequence invariants.
+- New parser robustness suite: `tests/streaming_parser_robustness.rs` (8 tests) covering unknown fields, partial tool-call payloads, unicode/large chunks, mixed newline handling, blank-line interleaving, and bounded malformed-input no-panic checks.
+- New path security suite: `tests/path_security_edges.rs` (6 tests) covering sensitive file blocking, traversal-like inputs, case-insensitive matching, slash/backslash normalization, and context side-effect assertions.
+- New large payload boundary suite: `tests/large_payload_boundaries.rs` (4 tests) covering high-volume message persistence, large workspace export/import integrity, and large-corpus search behavior.
+- Additional quoted-command parsing tests in `src/app/mod.rs` for `/workspace create`, `/workspace set-path`, `/export`, and `/session rename --to`.
+
+### Fixed
+- Legacy DB compatibility gap for `messages` metadata by auto-adding missing `images` and `tool_calls` columns during migration.
+- Concurrent DB write stability by applying SQLite busy-timeout handling instead of immediate lock failure in normal contention windows.
+
+### Modified
+- Slash-command argument handling now strips surrounding quotes for path/name/title values in key command flows (`/workspace create`, `/workspace set-path`, `/export`, `/session rename ... --to ...`).
+- Mock Ollama test harness was extended with delayed-response and abrupt-disconnect server modes to support deterministic network-failure coverage.
+
 ## [0.0.6] - 2026-03-29
 
 ### Added

@@ -17,6 +17,7 @@ impl Storage {
             std::fs::create_dir_all(parent)?;
         }
         let conn = Connection::open(path)?;
+        conn.busy_timeout(std::time::Duration::from_millis(500))?;
         conn.execute_batch("PRAGMA foreign_keys = ON;")?;
         let storage = Self { conn };
         storage.migrate()?;
@@ -112,6 +113,7 @@ impl Storage {
             "#,
         )?;
         self.ensure_workspace_root_path_column()?;
+        self.ensure_message_metadata_columns()?;
         Ok(())
     }
 
@@ -127,6 +129,31 @@ impl Storage {
 
         self.conn
             .execute("ALTER TABLE workspaces ADD COLUMN root_path TEXT", [])?;
+        Ok(())
+    }
+
+    fn ensure_message_metadata_columns(&self) -> Result<(), WorkspaceError> {
+        let mut has_images = false;
+        let mut has_tool_calls = false;
+        let mut statement = self.conn.prepare("PRAGMA table_info(messages)")?;
+        let mut rows = statement.query([])?;
+        while let Some(row) = rows.next()? {
+            let column_name: String = row.get(1)?;
+            if column_name == "images" {
+                has_images = true;
+            } else if column_name == "tool_calls" {
+                has_tool_calls = true;
+            }
+        }
+
+        if !has_images {
+            self.conn
+                .execute("ALTER TABLE messages ADD COLUMN images TEXT", [])?;
+        }
+        if !has_tool_calls {
+            self.conn
+                .execute("ALTER TABLE messages ADD COLUMN tool_calls TEXT", [])?;
+        }
         Ok(())
     }
 

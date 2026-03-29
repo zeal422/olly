@@ -2137,6 +2137,18 @@ fn starts_with_ignore_ascii_case(value: &str, prefix: &str) -> bool {
         .unwrap_or(false)
 }
 
+fn unquote_command_value(raw: &str) -> String {
+    let trimmed = raw.trim();
+    if trimmed.len() >= 2 {
+        let first = trimmed.as_bytes()[0];
+        let last = trimmed.as_bytes()[trimmed.len() - 1];
+        if (first == b'"' && last == b'"') || (first == b'\'' && last == b'\'') {
+            return trimmed[1..trimmed.len() - 1].trim().to_string();
+        }
+    }
+    trimmed.to_string()
+}
+
 fn next_workspace_name(existing: &[crate::workspace::Workspace], base: &str) -> String {
     if !existing
         .iter()
@@ -2251,7 +2263,7 @@ fn handle_command(
                 app.push_system("Usage: /export <json|md> <path>".to_string());
             } else {
                 let format = parts[1];
-                let path = PathBuf::from(parts[2..].join(" "));
+                let path = PathBuf::from(unquote_command_value(&parts[2..].join(" ")));
                 match format {
                     "json" => manager.export_conversation_json(session.conversation_id, &path)?,
                     "md" | "markdown" => {
@@ -2353,7 +2365,9 @@ fn handle_command(
                         }
 
                         let (name_part, root_path_raw) =
-                            if let Some((left, right)) = raw_create.split_once(" --path ") {
+                            if let Some(path_only) = raw_create.strip_prefix("--path ") {
+                                ("", Some(path_only.trim()))
+                            } else if let Some((left, right)) = raw_create.split_once(" --path ") {
                                 (left.trim(), Some(right.trim()))
                             } else {
                                 (raw_create, None)
@@ -2361,19 +2375,20 @@ fn handle_command(
 
                         let explicit_path = root_path_raw.is_some();
                         let root_path = if let Some(path_raw) = root_path_raw {
-                            if path_raw.is_empty() {
+                            let normalized_path = unquote_command_value(path_raw);
+                            if normalized_path.is_empty() {
                                 app.push_system(
                                     "Workspace path cannot be empty after `--path`.".to_string(),
                                 );
                                 return Ok(());
                             }
-                            PathBuf::from(path_raw)
+                            PathBuf::from(normalized_path)
                         } else {
                             std::env::current_dir()?
                         };
 
                         let existing_workspaces = manager.list_workspaces()?;
-                        let mut name = name_part.trim().to_string();
+                        let mut name = unquote_command_value(name_part);
                         if name.is_empty() {
                             name = next_workspace_name(&existing_workspaces, "New Workspace");
                         }
@@ -2589,7 +2604,8 @@ fn handle_command(
                         };
 
                         let selector = selector_raw.trim();
-                        let path_value = path_raw.trim();
+                        let selector = unquote_command_value(selector);
+                        let path_value = unquote_command_value(path_raw.trim());
                         if selector.is_empty() || path_value.is_empty() {
                             app.push_system(
                                 "Usage: /workspace set-path <id|name> --path <folder>".to_string(),
@@ -2603,11 +2619,12 @@ fn handle_command(
                         } else {
                             workspaces
                                 .into_iter()
-                                .find(|w| w.name.eq_ignore_ascii_case(selector))
+                                .find(|w| w.name.eq_ignore_ascii_case(&selector))
                         };
                         let Some(workspace) = target else {
                             app.push_system(format!(
-                                "Workspace not found: {selector}. Use `/workspace list`."
+                                "Workspace not found: {}. Use `/workspace list`.",
+                                selector
                             ));
                             return Ok(());
                         };
@@ -2846,12 +2863,15 @@ fn handle_command(
                         let (selector, new_title) = if let Some((left, right)) =
                             raw_args.split_once(" --to ")
                         {
-                            (left.trim().to_string(), right.trim().to_string())
+                            (
+                                unquote_command_value(left.trim()),
+                                unquote_command_value(right.trim()),
+                            )
                         } else if let Some(index) = raw_args.find(char::is_whitespace) {
                             let first = raw_args[..index].trim();
                             let rest = raw_args[index..].trim();
                             if first.parse::<i64>().is_ok() && !rest.is_empty() {
-                                (first.to_string(), rest.to_string())
+                                (first.to_string(), unquote_command_value(rest))
                             } else {
                                 let mut titled_sessions = sessions
                                     .iter()
@@ -2870,7 +2890,7 @@ fn handle_command(
                                             if !candidate.is_empty() {
                                                 return Some((
                                                     title.to_string(),
-                                                    candidate.to_string(),
+                                                    unquote_command_value(candidate),
                                                 ));
                                             }
                                         }
@@ -3113,12 +3133,15 @@ fn tool_calls_preview(tool_calls: &[ChatToolCall]) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::{
-        autocomplete_suggestions, is_cloud_model_name, load_ui_state_from_path,
-        next_autocomplete_value, save_ui_state_to_path, App, ModelBucket, SessionEntry,
-        SidebarItem, UiRuntimeState, UiTheme, WorkspaceEntry,
+        autocomplete_suggestions, confirm_pending_workspace_delete, handle_command,
+        is_cloud_model_name, load_ui_state_from_path, next_autocomplete_value,
+        save_ui_state_to_path, App, ModelBucket, SessionEntry, SidebarItem, UiRuntimeState,
+        UiTheme, WorkspaceEntry,
     };
+    use crate::workspace::{manager::WorkspaceManager, WorkspaceSession};
     use std::{
         fs,
+        path::PathBuf,
         time::{SystemTime, UNIX_EPOCH},
     };
 
@@ -3150,6 +3173,66 @@ mod tests {
                 title: String::from("Refactor"),
             },
         ]
+    }
+
+    fn unique_temp_root(label: &str) -> PathBuf {
+        let stamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock moved backwards")
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!(
+            "olly-app-tests-{label}-{}-{stamp}",
+            std::process::id()
+        ));
+        fs::create_dir_all(&root).expect("create test root");
+        root
+    }
+
+    fn setup_app_state(label: &str) -> (PathBuf, WorkspaceManager, WorkspaceSession, App) {
+        let root = unique_temp_root(label);
+        let db_path = root.join("workspaces.db");
+        let manager = WorkspaceManager::open(&db_path).expect("open manager");
+        let session = manager
+            .bootstrap_default("Default Workspace", "llama3.2:latest")
+            .expect("bootstrap default workspace");
+        let mut app = App::new(
+            String::from("http://localhost:11434"),
+            String::from("llama3.2:latest"),
+        );
+        app.active_workspace_id = session.workspace_id;
+        app.active_session_id = session.conversation_id;
+        app.workspace_name = String::from("Default Workspace");
+        app.refresh_workspaces(&manager)
+            .expect("refresh workspaces after bootstrap");
+        app.refresh_sessions(&manager, session.workspace_id)
+            .expect("refresh sessions after bootstrap");
+        app.sync_active_workspace_label(session.workspace_id);
+        app.focus_active_session(session.workspace_id, session.conversation_id);
+        (root, manager, session, app)
+    }
+
+    fn select_workspace_in_sidebar(app: &mut App, workspace_id: i64) {
+        let entries = app.sidebar_entries();
+        let target_index = entries
+            .iter()
+            .position(|entry| match entry {
+                SidebarItem::Workspace(index) => app
+                    .workspaces
+                    .get(*index)
+                    .map(|workspace| workspace.id == workspace_id)
+                    .unwrap_or(false),
+                _ => false,
+            })
+            .expect("workspace should exist in sidebar");
+        app.sidebar_index = target_index;
+    }
+
+    fn latest_system_message(app: &App) -> Option<&str> {
+        app.messages
+            .iter()
+            .rev()
+            .find(|message| message.role == "System")
+            .map(|message| message.content.as_str())
     }
 
     #[test]
@@ -3458,5 +3541,662 @@ mod tests {
         );
         assert!(suggestions.contains(&String::from("/session delete 10")));
         assert!(suggestions.contains(&String::from("/session delete Refactor")));
+    }
+
+    #[test]
+    fn workspace_create_without_name_uses_incremented_default_name() {
+        let (root, manager, mut session, mut app) =
+            setup_app_state("workspace-create-default-name");
+        let create_root = root.join("workspace-create-root");
+        fs::create_dir_all(&create_root).expect("create workspace root");
+        manager
+            .create_workspace("New Workspace", "llama3.2:latest", Some(&create_root))
+            .expect("create existing New Workspace");
+        app.refresh_workspaces(&manager)
+            .expect("refresh workspaces before create");
+
+        handle_command(
+            &mut app,
+            &manager,
+            &mut session,
+            "llama3.2:latest",
+            &format!("/workspace create --path {}", create_root.display()),
+        )
+        .expect("workspace create command");
+
+        let names = manager
+            .list_workspaces()
+            .expect("list workspaces")
+            .into_iter()
+            .map(|workspace| workspace.name)
+            .collect::<Vec<_>>();
+        assert!(names.iter().any(|name| name == "New Workspace"));
+        assert!(names
+            .iter()
+            .any(|name| name.starts_with("New Workspace ") && name != "New Workspace"));
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn workspace_rename_rejects_duplicate_name() {
+        let (root, manager, mut session, mut app) = setup_app_state("workspace-rename-duplicate");
+        let taken_root = root.join("taken-workspace-root");
+        fs::create_dir_all(&taken_root).expect("create taken workspace root");
+        manager
+            .create_workspace("Taken Name", "llama3.2:latest", Some(&taken_root))
+            .expect("create workspace with taken name");
+        app.refresh_workspaces(&manager)
+            .expect("refresh workspaces before rename");
+
+        handle_command(
+            &mut app,
+            &manager,
+            &mut session,
+            "llama3.2:latest",
+            "/workspace rename Taken Name",
+        )
+        .expect("workspace rename command");
+
+        let names = manager
+            .list_workspaces()
+            .expect("list workspaces")
+            .into_iter()
+            .map(|workspace| workspace.name)
+            .collect::<Vec<_>>();
+        assert_eq!(
+            names
+                .iter()
+                .filter(|name| name.as_str() == "Taken Name")
+                .count(),
+            1
+        );
+        assert!(names.iter().any(|name| name == "Default Workspace"));
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn workspace_delete_uses_sidebar_selection_and_confirmation_flow() {
+        let (root, manager, mut session, mut app) = setup_app_state("workspace-delete-selection");
+        let delete_root = root.join("delete-workspace-root");
+        fs::create_dir_all(&delete_root).expect("create delete workspace root");
+        let deletable = manager
+            .create_workspace("Delete Me", "llama3.2:latest", Some(&delete_root))
+            .expect("create deletable workspace");
+
+        app.refresh_workspaces(&manager)
+            .expect("refresh workspaces before delete");
+        app.refresh_sessions(&manager, session.workspace_id)
+            .expect("refresh sessions before delete");
+        select_workspace_in_sidebar(&mut app, deletable.workspace_id);
+
+        handle_command(
+            &mut app,
+            &manager,
+            &mut session,
+            "llama3.2:latest",
+            "/workspace delete",
+        )
+        .expect("open workspace delete confirmation");
+        assert_eq!(
+            app.pending_workspace_delete
+                .as_ref()
+                .map(|pending| pending.id),
+            Some(deletable.workspace_id)
+        );
+
+        confirm_pending_workspace_delete(&mut app, &manager, &mut session, "llama3.2:latest")
+            .expect("confirm delete");
+        assert!(app.pending_workspace_delete.is_none());
+        assert!(!manager
+            .list_workspaces()
+            .expect("list workspaces after delete")
+            .iter()
+            .any(|workspace| workspace.id == deletable.workspace_id));
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn session_create_sets_active_session_and_loads_empty_messages() {
+        let (root, manager, mut session, mut app) = setup_app_state("session-create-active");
+        let previous = session.conversation_id;
+
+        handle_command(
+            &mut app,
+            &manager,
+            &mut session,
+            "llama3.2:latest",
+            "/session create Planning",
+        )
+        .expect("session create command");
+
+        assert_ne!(session.conversation_id, previous);
+        assert_eq!(app.active_session_id, session.conversation_id);
+        assert!(manager
+            .load_messages(session.conversation_id)
+            .expect("load new session messages")
+            .is_empty());
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn session_delete_falls_back_then_enters_zero_session_state() {
+        let (root, manager, mut session, mut app) = setup_app_state("session-delete-fallback");
+        let main_session = session.conversation_id;
+        let secondary = manager
+            .create_session(session.workspace_id, Some("Secondary"))
+            .expect("create secondary session");
+
+        app.refresh_sessions(&manager, session.workspace_id)
+            .expect("refresh sessions after create");
+        session.conversation_id = secondary;
+        app.active_session_id = secondary;
+
+        handle_command(
+            &mut app,
+            &manager,
+            &mut session,
+            "llama3.2:latest",
+            &format!("/session delete {secondary}"),
+        )
+        .expect("delete secondary session");
+
+        assert_eq!(session.conversation_id, main_session);
+        assert_eq!(app.active_session_id, main_session);
+
+        handle_command(
+            &mut app,
+            &manager,
+            &mut session,
+            "llama3.2:latest",
+            &format!("/session delete {main_session}"),
+        )
+        .expect("delete final session");
+
+        assert_eq!(session.conversation_id, 0);
+        assert_eq!(app.active_session_id, 0);
+        assert_eq!(app.active_session_title, "No Session");
+        assert_eq!(app.status, "No session active");
+        assert!(app.messages.is_empty());
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn session_rename_supports_id_and_title_with_to_syntax() {
+        let (root, manager, mut session, mut app) = setup_app_state("session-rename-paths");
+        let target_id = manager
+            .create_session(session.workspace_id, Some("Research Notes"))
+            .expect("create target session");
+        app.refresh_sessions(&manager, session.workspace_id)
+            .expect("refresh sessions before rename");
+        session.conversation_id = target_id;
+        app.active_session_id = target_id;
+
+        handle_command(
+            &mut app,
+            &manager,
+            &mut session,
+            "llama3.2:latest",
+            &format!("/session rename {target_id} Renamed By Id"),
+        )
+        .expect("rename by id");
+
+        handle_command(
+            &mut app,
+            &manager,
+            &mut session,
+            "llama3.2:latest",
+            "/session rename Renamed By Id --to Final Session Name",
+        )
+        .expect("rename by title --to");
+
+        let renamed = manager
+            .list_conversations(session.workspace_id)
+            .expect("list conversations after rename")
+            .into_iter()
+            .find(|conversation| conversation.id == target_id)
+            .expect("target session should exist");
+        assert_eq!(renamed.title.as_deref(), Some("Final Session Name"));
+        assert_eq!(app.active_session_title, "Final Session Name");
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn model_command_handles_exact_prefix_and_unknown_values() {
+        let (root, manager, mut session, mut app) = setup_app_state("model-command-cases");
+        app.models = vec![
+            String::from("qwen2.5-coder:7b"),
+            String::from("gemini-3-flash-preview:cloud"),
+        ];
+
+        handle_command(
+            &mut app,
+            &manager,
+            &mut session,
+            "llama3.2:latest",
+            "/model gemini-3-flash-preview:cloud",
+        )
+        .expect("exact model command");
+        assert_eq!(app.model, "gemini-3-flash-preview:cloud");
+
+        handle_command(
+            &mut app,
+            &manager,
+            &mut session,
+            "llama3.2:latest",
+            "/model qwen2.5",
+        )
+        .expect("prefix model command");
+        assert_eq!(app.model, "qwen2.5-coder:7b");
+
+        handle_command(
+            &mut app,
+            &manager,
+            &mut session,
+            "llama3.2:latest",
+            "/model my-custom-model:cloud",
+        )
+        .expect("unknown model command");
+        assert_eq!(app.model, "my-custom-model:cloud");
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn url_command_updates_runtime_url() {
+        let (root, manager, mut session, mut app) = setup_app_state("url-command-update");
+
+        handle_command(
+            &mut app,
+            &manager,
+            &mut session,
+            "llama3.2:latest",
+            "/url http://127.0.0.1:11435",
+        )
+        .expect("url command");
+        assert_eq!(app.url, "http://127.0.0.1:11435");
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn workspace_create_without_args_shows_usage() {
+        let (root, manager, mut session, mut app) = setup_app_state("workspace-create-usage");
+
+        handle_command(
+            &mut app,
+            &manager,
+            &mut session,
+            "llama3.2:latest",
+            "/workspace create",
+        )
+        .expect("workspace create usage branch");
+
+        let message = latest_system_message(&app).expect("expected system usage message");
+        assert!(message.contains("Usage: /workspace create <name> --path <folder>"));
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn workspace_set_path_missing_path_shows_usage() {
+        let (root, manager, mut session, mut app) = setup_app_state("workspace-set-path-usage");
+
+        handle_command(
+            &mut app,
+            &manager,
+            &mut session,
+            "llama3.2:latest",
+            "/workspace set-path Default Workspace",
+        )
+        .expect("workspace set-path usage branch");
+
+        assert_eq!(
+            latest_system_message(&app),
+            Some("Usage: /workspace set-path <id|name> --path <folder>")
+        );
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn workspace_create_supports_quoted_name_and_path() {
+        let (root, manager, mut session, mut app) = setup_app_state("workspace-create-quoted");
+        let quoted_path = root.join("quoted workspace path");
+        fs::create_dir_all(&quoted_path).expect("create quoted workspace path");
+
+        handle_command(
+            &mut app,
+            &manager,
+            &mut session,
+            "llama3.2:latest",
+            &format!(
+                "/workspace create \"Quoted Workspace\" --path \"{}\"",
+                quoted_path.display()
+            ),
+        )
+        .expect("workspace create with quoted args");
+
+        let created = manager
+            .list_workspaces()
+            .expect("list workspaces after create")
+            .into_iter()
+            .find(|workspace| workspace.name == "Quoted Workspace")
+            .expect("quoted workspace should exist");
+        assert_eq!(session.workspace_id, created.id);
+        assert_eq!(app.workspace_name, "Quoted Workspace");
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn workspace_set_path_supports_quoted_selector_and_path() {
+        let (root, manager, mut session, mut app) = setup_app_state("workspace-set-path-quoted");
+        let quoted_path = root.join("path with spaces");
+        fs::create_dir_all(&quoted_path).expect("create quoted path");
+        let canonical = fs::canonicalize(&quoted_path)
+            .expect("canonicalize quoted path")
+            .to_string_lossy()
+            .into_owned();
+
+        handle_command(
+            &mut app,
+            &manager,
+            &mut session,
+            "llama3.2:latest",
+            &format!(
+                "/workspace set-path \"Default Workspace\" --path \"{}\"",
+                quoted_path.display()
+            ),
+        )
+        .expect("workspace set-path with quoted args");
+
+        let updated = manager
+            .list_workspaces()
+            .expect("list workspaces after set-path")
+            .into_iter()
+            .find(|workspace| workspace.id == session.workspace_id)
+            .expect("active workspace should exist");
+        assert_eq!(updated.root_path.as_deref(), Some(canonical.as_str()));
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn export_markdown_supports_quoted_output_path() {
+        let (root, manager, mut session, mut app) = setup_app_state("export-md-quoted");
+        manager
+            .save_message(
+                session.conversation_id,
+                "assistant",
+                "quoted export payload",
+            )
+            .expect("save message for export");
+        let output = root.join("exports folder").join("conversation file.md");
+
+        handle_command(
+            &mut app,
+            &manager,
+            &mut session,
+            "llama3.2:latest",
+            &format!("/export md \"{}\"", output.display()),
+        )
+        .expect("export markdown with quoted path");
+
+        assert!(output.exists());
+        let raw = fs::read_to_string(&output).expect("read exported markdown");
+        assert!(raw.contains("quoted export payload"));
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn session_rename_supports_quoted_titles_with_to_syntax() {
+        let (root, manager, mut session, mut app) = setup_app_state("session-rename-quoted");
+        let target_id = manager
+            .create_session(session.workspace_id, Some("Old Multi Word Title"))
+            .expect("create target session");
+        app.refresh_sessions(&manager, session.workspace_id)
+            .expect("refresh sessions");
+        session.conversation_id = target_id;
+        app.active_session_id = target_id;
+
+        handle_command(
+            &mut app,
+            &manager,
+            &mut session,
+            "llama3.2:latest",
+            "/session rename \"Old Multi Word Title\" --to \"New Multi Word Title\"",
+        )
+        .expect("session rename with quoted titles");
+
+        let renamed = manager
+            .list_conversations(session.workspace_id)
+            .expect("list sessions after rename")
+            .into_iter()
+            .find(|entry| entry.id == target_id)
+            .expect("target session should exist");
+        assert_eq!(renamed.title.as_deref(), Some("New Multi Word Title"));
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn workspace_switch_unknown_keeps_active_workspace() {
+        let (root, manager, mut session, mut app) = setup_app_state("workspace-switch-unknown");
+        let before_id = session.workspace_id;
+        let before_name = app.workspace_name.clone();
+
+        handle_command(
+            &mut app,
+            &manager,
+            &mut session,
+            "llama3.2:latest",
+            "/workspace switch Missing Workspace",
+        )
+        .expect("workspace switch unknown branch");
+
+        assert_eq!(session.workspace_id, before_id);
+        assert_eq!(app.active_workspace_id, before_id);
+        assert_eq!(app.workspace_name, before_name);
+        let message = latest_system_message(&app).expect("expected not-found message");
+        assert!(message.contains("Workspace not found: Missing Workspace"));
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn session_switch_unknown_keeps_active_session() {
+        let (root, manager, mut session, mut app) = setup_app_state("session-switch-unknown");
+        let before_id = session.conversation_id;
+
+        handle_command(
+            &mut app,
+            &manager,
+            &mut session,
+            "llama3.2:latest",
+            "/session switch 999999",
+        )
+        .expect("session switch unknown branch");
+
+        assert_eq!(session.conversation_id, before_id);
+        assert_eq!(app.active_session_id, before_id);
+        let message = latest_system_message(&app).expect("expected not-found message");
+        assert!(message.contains("Session not found: 999999"));
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn session_rename_invalid_syntax_shows_usage() {
+        let (root, manager, mut session, mut app) = setup_app_state("session-rename-usage");
+
+        handle_command(
+            &mut app,
+            &manager,
+            &mut session,
+            "llama3.2:latest",
+            "/session rename onlyone",
+        )
+        .expect("session rename usage branch");
+
+        let message = latest_system_message(&app).expect("expected usage message");
+        assert!(message.contains("Usage: /session rename <id> <new title>"));
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn session_delete_unknown_id_does_not_mutate_active_session() {
+        let (root, manager, mut session, mut app) = setup_app_state("session-delete-unknown");
+        let before_id = session.conversation_id;
+
+        handle_command(
+            &mut app,
+            &manager,
+            &mut session,
+            "llama3.2:latest",
+            "/session delete 777777",
+        )
+        .expect("session delete unknown branch");
+
+        assert_eq!(session.conversation_id, before_id);
+        assert_eq!(app.active_session_id, before_id);
+        let message = latest_system_message(&app).expect("expected not-found message");
+        assert!(message.contains("Session not found: 777777"));
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn export_unknown_format_shows_explicit_error() {
+        let (root, manager, mut session, mut app) = setup_app_state("export-unknown-format");
+        let export_path = root.join("conversation.txt");
+
+        handle_command(
+            &mut app,
+            &manager,
+            &mut session,
+            "llama3.2:latest",
+            &format!("/export txt {}", export_path.display()),
+        )
+        .expect("export unknown format branch");
+
+        assert_eq!(
+            latest_system_message(&app),
+            Some("Unknown export format. Use json or md.")
+        );
+        assert!(!export_path.exists());
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn model_command_without_arg_shows_known_models_help() {
+        let (root, manager, mut session, mut app) = setup_app_state("model-command-help");
+        app.models = vec![
+            String::from("qwen2.5-coder:7b"),
+            String::from("gemini-3-flash-preview:cloud"),
+        ];
+        app.model = String::from("qwen2.5-coder:7b");
+
+        handle_command(
+            &mut app,
+            &manager,
+            &mut session,
+            "llama3.2:latest",
+            "/model",
+        )
+        .expect("model help branch");
+
+        let message = latest_system_message(&app).expect("expected model help message");
+        assert!(message.contains("Usage: /model <name>"));
+        assert!(message.contains("Known models:"));
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn clamp_sidebar_index_clamps_to_last_valid_sidebar_entry() {
+        let mut app = App::new(
+            String::from("http://localhost:11434"),
+            String::from("llama3.2:latest"),
+        );
+        app.sidebar_index = 42;
+        app.models_collapsed = true;
+        app.cloud_models_collapsed = true;
+        app.local_models_collapsed = true;
+        app.workspaces_collapsed = true;
+        app.workspaces.clear();
+        app.models.clear();
+        app.clamp_sidebar_index();
+
+        assert_eq!(app.sidebar_entries().len(), 2);
+        assert_eq!(app.sidebar_index, 1);
+    }
+
+    #[test]
+    fn sync_active_session_label_falls_back_to_latest_when_stale() {
+        let mut app = App::new(
+            String::from("http://localhost:11434"),
+            String::from("llama3.2:latest"),
+        );
+        app.sessions = vec![
+            SessionEntry {
+                id: 21,
+                title: String::from("First"),
+            },
+            SessionEntry {
+                id: 22,
+                title: String::from("Latest"),
+            },
+        ];
+        app.active_session_id = 999;
+
+        app.sync_active_session_label();
+
+        assert_eq!(app.active_session_id, 22);
+        assert_eq!(app.active_session_title, "Latest");
+    }
+
+    #[test]
+    fn clear_active_workspace_state_resets_all_related_fields() {
+        let mut app = App::new(
+            String::from("http://localhost:11434"),
+            String::from("llama3.2:latest"),
+        );
+        app.active_workspace_id = 5;
+        app.workspace_name = String::from("Some Workspace");
+        app.workspace_root_path = Some(String::from("C:/tmp/workspace"));
+        app.active_session_id = 77;
+        app.active_session_title = String::from("Custom Session");
+        app.sessions = vec![SessionEntry {
+            id: 77,
+            title: String::from("Custom Session"),
+        }];
+        app.messages.push(super::Message {
+            role: String::from("System"),
+            content: String::from("stale"),
+            timestamp: String::from("00:00"),
+            image_count: 0,
+            tool_calls_preview: None,
+        });
+        app.status = String::from("busy");
+
+        app.clear_active_workspace_state();
+
+        assert_eq!(app.active_workspace_id, 0);
+        assert_eq!(app.workspace_name, "No Workspace");
+        assert_eq!(app.workspace_root_path, None);
+        assert_eq!(app.active_session_id, 0);
+        assert_eq!(app.active_session_title, "No Session");
+        assert!(app.sessions.is_empty());
+        assert!(app.messages.is_empty());
+        assert_eq!(app.status, "No workspace active");
     }
 }

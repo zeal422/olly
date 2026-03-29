@@ -1548,3 +1548,99 @@ fn centered_rect(percent_x: u16, percent_y: u16, area: Rect) -> Rect {
         ])
         .split(popup_layout[1])[1]
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        scroll_window, sidebar_action_hint, sidebar_line_with_marquee, truncate_end,
+        truncate_middle,
+    };
+    use crate::app::{App, ModelBucket, SessionEntry, SidebarItem, WorkspaceEntry};
+
+    fn app_for_sidebar_tests() -> App {
+        let mut app = App::new(
+            String::from("http://localhost:11434"),
+            String::from("qwen2.5-coder:7b"),
+        );
+        app.models = vec![
+            String::from("qwen2.5-coder:7b"),
+            String::from("gemini-3-flash-preview:cloud"),
+        ];
+        app.workspaces = vec![WorkspaceEntry {
+            id: 1,
+            name: String::from("Workspace A"),
+            root_path: Some(String::from("C:/work/a")),
+            sessions: vec![SessionEntry {
+                id: 10,
+                title: String::from("Main Conversation"),
+            }],
+        }];
+        app
+    }
+
+    #[test]
+    fn truncate_middle_preserves_expected_shape() {
+        let value = "abcdefghijklmnopqrstuvwxyz";
+        let truncated = truncate_middle(value, 12);
+        assert_eq!(truncated.chars().count(), 12);
+        assert!(truncated.starts_with("abcd"));
+        assert!(truncated.ends_with("wxyz"));
+        assert!(truncated.contains("..."));
+    }
+
+    #[test]
+    fn truncate_end_preserves_expected_shape() {
+        assert_eq!(truncate_end("abcdef", 0), "");
+        assert_eq!(truncate_end("abcdef", 3), "...");
+        assert_eq!(truncate_end("abcdefghij", 8), "abcde...");
+    }
+
+    #[test]
+    fn scroll_window_rotates_content_by_offset() {
+        let chars = "abcdef".chars().collect::<Vec<_>>();
+        assert_eq!(scroll_window(&chars, 4, 0), "abcd");
+        assert_eq!(scroll_window(&chars, 4, 2), "cdef");
+        assert_eq!(scroll_window(&chars, 4, 5), "fabc");
+    }
+
+    #[test]
+    fn sidebar_marquee_truncates_unselected_and_scrolls_selected() {
+        let line = "> Workspace: VeryLongWorkspaceNameForSmallScreens";
+        let unselected = sidebar_line_with_marquee(line, false, 16, 0);
+        let selected_a = sidebar_line_with_marquee(line, true, 16, 0);
+        let selected_b = sidebar_line_with_marquee(line, true, 16, 40);
+
+        assert_eq!(unselected.chars().count(), 16);
+        assert!(unselected.ends_with("..."));
+        assert_eq!(selected_a.chars().count(), 16);
+        assert_eq!(selected_b.chars().count(), 16);
+        assert_ne!(selected_a, selected_b);
+    }
+
+    #[test]
+    fn sidebar_action_hint_matches_selected_item_type() {
+        let mut app = app_for_sidebar_tests();
+
+        let entries = app.sidebar_entries();
+        let cloud_group_index = entries
+            .iter()
+            .position(|entry| matches!(entry, SidebarItem::ModelGroupHeader(ModelBucket::Cloud)))
+            .expect("cloud model group should exist");
+        app.sidebar_index = cloud_group_index;
+        assert_eq!(
+            sidebar_action_hint(&app),
+            "Enter collapse/expand cloud models"
+        );
+
+        let entries = app.sidebar_entries();
+        let session_index = entries
+            .iter()
+            .position(|entry| matches!(entry, SidebarItem::WorkspaceSession(_, _)))
+            .expect("workspace session item should exist");
+        app.sidebar_index = session_index;
+        assert_eq!(
+            sidebar_action_hint(&app),
+            "Enter open session | /session rename <id> <title> | /session delete"
+        );
+    }
+}

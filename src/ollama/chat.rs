@@ -20,6 +20,7 @@ pub struct ChatToolCall {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatMessage {
     pub role: String,
+    #[serde(default)]
     pub content: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub images: Option<Vec<String>>,
