@@ -23,15 +23,32 @@ fn ctrl_q_quits() {
 fn navigation_and_help_keys() {
     let up = KeyEvent::new(KeyCode::Up, KeyModifiers::NONE);
     let page_down = KeyEvent::new(KeyCode::PageDown, KeyModifiers::NONE);
+    let left = KeyEvent::new(KeyCode::Left, KeyModifiers::NONE);
+    let right = KeyEvent::new(KeyCode::Right, KeyModifiers::NONE);
     let help = KeyEvent::new(KeyCode::F(1), KeyModifiers::NONE);
     let esc = KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE);
     let tab = KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE);
 
     assert_eq!(resolve_key_event(up), InputAction::ScrollUp(1));
     assert_eq!(resolve_key_event(page_down), InputAction::ScrollDown(8));
+    assert_eq!(resolve_key_event(left), InputAction::MoveCursorLeft);
+    assert_eq!(resolve_key_event(right), InputAction::MoveCursorRight);
     assert_eq!(resolve_key_event(help), InputAction::ToggleHelp);
     assert_eq!(resolve_key_event(esc), InputAction::DismissOverlay);
     assert_eq!(resolve_key_event(tab), InputAction::SwitchFocus);
+}
+
+#[test]
+fn alt_navigation_keys_keep_standard_scroll_actions() {
+    let alt_up = KeyEvent::new(KeyCode::Up, KeyModifiers::ALT);
+    let alt_down = KeyEvent::new(KeyCode::Down, KeyModifiers::ALT);
+    let alt_page_up = KeyEvent::new(KeyCode::PageUp, KeyModifiers::ALT);
+    let alt_page_down = KeyEvent::new(KeyCode::PageDown, KeyModifiers::ALT);
+
+    assert_eq!(resolve_key_event(alt_up), InputAction::ScrollUp(1));
+    assert_eq!(resolve_key_event(alt_down), InputAction::ScrollDown(1));
+    assert_eq!(resolve_key_event(alt_page_up), InputAction::ScrollUp(8));
+    assert_eq!(resolve_key_event(alt_page_down), InputAction::ScrollDown(8));
 }
 
 #[test]

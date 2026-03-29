@@ -115,8 +115,8 @@ autocomplete = "Tab"
 - `F1`: open/close help
 - `Esc`: close dialogs and clear toasts
 - `Tab`: switch focus (sidebar/chat)
-- `Up` / `Down`: scroll chat (or move selection when sidebar focused)
-- `PgUp` / `PgDn`: faster scroll
+- `Arrow keys`: move input caret in chat (or move command/sidebar selection)
+- `PgUp` / `PgDn`: faster chat scroll
 - `Enter` (sidebar focused): activate selection (section headers collapse/expand)
 
 ## Slash Commands
@@ -195,6 +195,8 @@ PowerShell:
 ```powershell
 ./scripts/check.ps1
 ```
+
+Both scripts run: `cargo fmt --all -- --check`, `cargo clippy --all-targets --all-features -- -D warnings`, `cargo build`, and `cargo test --all-targets --all-features`.
 
 ## Release Process
 

@@ -485,12 +485,13 @@ pub fn draw(frame: &mut Frame<'_>, app: &App) {
         frame.area(),
     );
 
+    let input_height = input_panel_height(app, frame.area());
     let root = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Length(1),
             Constraint::Min(6),
-            Constraint::Length(3),
+            Constraint::Length(input_height),
         ])
         .split(frame.area());
 
@@ -923,6 +924,15 @@ fn render_input_panel(frame: &mut Frame<'_>, app: &App, area: Rect, palette: The
         return;
     }
 
+    let inner_width = area.width.saturating_sub(2).max(1);
+    let inner_height = area.height.saturating_sub(2) as usize;
+    let total_visual_lines = estimate_input_visual_lines(&app.input, inner_width);
+    let (cursor_line, _) =
+        input_cursor_visual_position(&app.input, app.input_cursor_char_index, inner_width);
+    let max_scroll_y = total_visual_lines.saturating_sub(inner_height) as u16;
+    let scroll_y =
+        (cursor_line.saturating_add(1).saturating_sub(inner_height) as u16).min(max_scroll_y);
+
     frame.render_widget(
         Paragraph::new(app.input.as_str())
             .style(
@@ -930,9 +940,11 @@ fn render_input_panel(frame: &mut Frame<'_>, app: &App, area: Rect, palette: The
                     .fg(palette.input_text)
                     .bg(input_background(app.theme)),
             )
+            .wrap(Wrap { trim: false })
+            .scroll((scroll_y, 0))
             .block(
                 Block::default()
-                    .title("Input (Ctrl+Enter send, Tab autocomplete)")
+                    .title("Input (Ctrl+Enter send, arrows move caret)")
                     .borders(Borders::ALL)
                     .style(
                         Style::default()
@@ -942,7 +954,114 @@ fn render_input_panel(frame: &mut Frame<'_>, app: &App, area: Rect, palette: The
             ),
         area,
     );
+
+    if app.focus == FocusPane::Chat || app.is_slash_command_input() {
+        if let Some((cursor_x, cursor_y)) = input_cursor_screen_position(
+            &app.input,
+            app.input_cursor_char_index,
+            area,
+            inner_width,
+            inner_height,
+            scroll_y,
+        ) {
+            frame.set_cursor_position((cursor_x, cursor_y));
+        }
+    }
+
     render_autocomplete_popup(frame, app, area, palette);
+}
+
+fn input_panel_height(app: &App, frame_area: Rect) -> u16 {
+    let min_total_height = 3;
+    let max_content_lines = 6_usize;
+    let inner_width = frame_area.width.saturating_sub(2).max(1);
+    let visual_lines = estimate_input_visual_lines(&app.input, inner_width);
+    let desired_total = visual_lines.min(max_content_lines) as u16 + 2;
+
+    // Reserve room for status + at least one body row.
+    let max_allowed = frame_area.height.saturating_sub(2).max(min_total_height);
+    desired_total.clamp(min_total_height, max_allowed)
+}
+
+fn estimate_input_visual_lines(input: &str, inner_width: u16) -> usize {
+    let width = inner_width.max(1) as usize;
+    if input.is_empty() {
+        return 1;
+    }
+
+    input
+        .split('\n')
+        .map(|line| {
+            let chars = line.chars().count();
+            chars.max(1).div_ceil(width)
+        })
+        .sum::<usize>()
+        .max(1)
+}
+
+fn input_cursor_visual_position(
+    input: &str,
+    cursor_char_index: usize,
+    inner_width: u16,
+) -> (usize, usize) {
+    let width = inner_width.max(1) as usize;
+    if input.is_empty() || cursor_char_index == 0 {
+        return (0, 0);
+    }
+
+    let clamped_cursor = cursor_char_index.min(input.chars().count());
+    let mut line = 0_usize;
+    let mut col = 0_usize;
+    for (index, ch) in input.chars().enumerate() {
+        if index >= clamped_cursor {
+            break;
+        }
+        if ch == '\n' {
+            line += 1;
+            col = 0;
+            continue;
+        }
+        if col >= width {
+            line += 1;
+            col = 0;
+        }
+        col += 1;
+    }
+
+    // Place cursor at the start of the next wrapped row when the current row is full.
+    if col >= width {
+        line += 1;
+        col = 0;
+    }
+
+    (line, col)
+}
+
+fn input_cursor_screen_position(
+    input: &str,
+    cursor_char_index: usize,
+    area: Rect,
+    inner_width: u16,
+    inner_height: usize,
+    scroll_y: u16,
+) -> Option<(u16, u16)> {
+    if inner_width == 0 || inner_height == 0 {
+        return None;
+    }
+
+    let (cursor_line, cursor_col) =
+        input_cursor_visual_position(input, cursor_char_index, inner_width);
+    let scroll_top = scroll_y as usize;
+    if cursor_line < scroll_top || cursor_line >= scroll_top + inner_height {
+        return None;
+    }
+
+    let visible_line = (cursor_line - scroll_top) as u16;
+    let max_x_offset = inner_width.saturating_sub(1) as usize;
+    let x_offset = cursor_col.min(max_x_offset) as u16;
+    let cursor_x = area.x.saturating_add(1).saturating_add(x_offset);
+    let cursor_y = area.y.saturating_add(1).saturating_add(visible_line);
+    Some((cursor_x, cursor_y))
 }
 
 fn render_autocomplete_popup(
@@ -1520,8 +1639,8 @@ Ctrl+Q      Quit (press twice)\n\
 F1          Toggle help\n\
 Esc         Close help/toast\n\
 Tab         Switch focus (or cycle slash autocomplete)\n\
-Up/Down     Scroll chat (or move sidebar selection)\n\
-PgUp/PgDn   Fast scroll\n\
+Arrows      Move input caret in chat (or move slash/sidebar selection)\n\
+PgUp/PgDn   Scroll chat faster\n\
 Enter       Select sidebar item (headers collapse/expand)\n\
 \n\
 Slash commands:\n\
@@ -1552,10 +1671,12 @@ fn centered_rect(percent_x: u16, percent_y: u16, area: Rect) -> Rect {
 #[cfg(test)]
 mod tests {
     use super::{
-        scroll_window, sidebar_action_hint, sidebar_line_with_marquee, truncate_end,
-        truncate_middle,
+        estimate_input_visual_lines, input_cursor_screen_position, input_cursor_visual_position,
+        input_panel_height, scroll_window, sidebar_action_hint, sidebar_line_with_marquee,
+        truncate_end, truncate_middle,
     };
     use crate::app::{App, ModelBucket, SessionEntry, SidebarItem, WorkspaceEntry};
+    use ratatui::layout::Rect;
 
     fn app_for_sidebar_tests() -> App {
         let mut app = App::new(
@@ -1642,5 +1763,72 @@ mod tests {
             sidebar_action_hint(&app),
             "Enter open session | /session rename <id> <title> | /session delete"
         );
+    }
+
+    #[test]
+    fn estimate_input_visual_lines_counts_newlines_and_wrapped_lines() {
+        assert_eq!(estimate_input_visual_lines("", 20), 1);
+        assert_eq!(estimate_input_visual_lines("hello", 20), 1);
+        assert_eq!(estimate_input_visual_lines("line1\nline2", 20), 2);
+        assert_eq!(estimate_input_visual_lines("abcdefghij", 4), 3);
+        assert_eq!(estimate_input_visual_lines("abc\n\ndef", 10), 3);
+    }
+
+    #[test]
+    fn input_panel_height_expands_for_multiline_and_clamps() {
+        let mut app = app_for_sidebar_tests();
+        let frame = Rect {
+            x: 0,
+            y: 0,
+            width: 120,
+            height: 40,
+        };
+
+        app.input = String::new();
+        assert_eq!(input_panel_height(&app, frame), 3);
+
+        app.input = "a\nb\nc\n".repeat(3);
+        assert_eq!(input_panel_height(&app, frame), 8);
+
+        let tiny_frame = Rect {
+            x: 0,
+            y: 0,
+            width: 20,
+            height: 5,
+        };
+        assert_eq!(input_panel_height(&app, tiny_frame), 3);
+    }
+
+    #[test]
+    fn input_cursor_visual_position_handles_wrapping_and_newlines() {
+        assert_eq!(input_cursor_visual_position("", 0, 10), (0, 0));
+        assert_eq!(input_cursor_visual_position("hello", 5, 10), (0, 5));
+        assert_eq!(input_cursor_visual_position("line1\nline2", 11, 10), (1, 5));
+        assert_eq!(input_cursor_visual_position("abcd", 4, 4), (1, 0));
+        assert_eq!(input_cursor_visual_position("abcdefghij", 10, 4), (2, 2));
+        assert_eq!(input_cursor_visual_position("abc\n\n", 5, 8), (2, 0));
+        assert_eq!(input_cursor_visual_position("a\n\nb", 2, 8), (1, 0));
+    }
+
+    #[test]
+    fn input_cursor_screen_position_respects_visible_scroll_window() {
+        let area = Rect {
+            x: 5,
+            y: 10,
+            width: 12,
+            height: 5,
+        };
+        let inner_width = area.width.saturating_sub(2).max(1);
+        let inner_height = area.height.saturating_sub(2) as usize;
+        let input = "one\ntwo\nthree\nfour";
+        let cursor = input.chars().count();
+
+        let hidden =
+            input_cursor_screen_position(input, cursor, area, inner_width, inner_height, 0);
+        assert!(hidden.is_none());
+
+        let visible =
+            input_cursor_screen_position(input, cursor, area, inner_width, inner_height, 1);
+        assert!(visible.is_some());
     }
 }

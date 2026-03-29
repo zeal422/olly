@@ -12,6 +12,7 @@ use std::{
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use chrono::Local;
 use crossterm::{
+    cursor::SetCursorStyle,
     event::{self, Event},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
@@ -47,9 +48,38 @@ const AUTO_SCROLL_TARGET: u16 = 30_000;
 
 #[cfg(windows)]
 fn maximize_console_window() {
+    #[repr(C)]
+    struct Coord {
+        x: i16,
+        y: i16,
+    }
+
+    #[repr(C)]
+    struct SmallRect {
+        left: i16,
+        top: i16,
+        right: i16,
+        bottom: i16,
+    }
+
+    #[repr(C)]
+    struct ConsoleScreenBufferInfo {
+        dw_size: Coord,
+        dw_cursor_position: Coord,
+        w_attributes: u16,
+        sr_window: SmallRect,
+        dw_maximum_window_size: Coord,
+    }
+
     #[link(name = "Kernel32")]
     extern "system" {
         fn GetConsoleWindow() -> *mut core::ffi::c_void;
+        fn GetStdHandle(std_handle: i32) -> *mut core::ffi::c_void;
+        fn GetConsoleScreenBufferInfo(
+            console_output: *mut core::ffi::c_void,
+            console_screen_buffer_info: *mut ConsoleScreenBufferInfo,
+        ) -> i32;
+        fn SetConsoleScreenBufferSize(console_output: *mut core::ffi::c_void, size: Coord) -> i32;
     }
 
     #[link(name = "User32")]
@@ -57,6 +87,7 @@ fn maximize_console_window() {
         fn ShowWindow(hwnd: *mut core::ffi::c_void, command: i32) -> i32;
     }
 
+    const STD_OUTPUT_HANDLE: i32 = -11;
     const SW_MAXIMIZE: i32 = 3;
 
     // SAFETY: We only call Win32 APIs with the process console window handle.
@@ -65,6 +96,26 @@ fn maximize_console_window() {
         let hwnd = GetConsoleWindow();
         if !hwnd.is_null() {
             let _ = ShowWindow(hwnd, SW_MAXIMIZE);
+        }
+
+        // Keep console buffer equal to visible window size to avoid host scrollbar artifacts.
+        let stdout_handle = GetStdHandle(STD_OUTPUT_HANDLE);
+        if !stdout_handle.is_null() && (stdout_handle as isize) != -1 {
+            let mut info = std::mem::MaybeUninit::<ConsoleScreenBufferInfo>::uninit();
+            if GetConsoleScreenBufferInfo(stdout_handle, info.as_mut_ptr()) != 0 {
+                let info = info.assume_init();
+                let width = info.sr_window.right - info.sr_window.left + 1;
+                let height = info.sr_window.bottom - info.sr_window.top + 1;
+                if width > 0 && height > 0 {
+                    let _ = SetConsoleScreenBufferSize(
+                        stdout_handle,
+                        Coord {
+                            x: width,
+                            y: height,
+                        },
+                    );
+                }
+            }
         }
     }
 }
@@ -231,6 +282,8 @@ pub struct App {
     pub theme: UiTheme,
     pub theme_picker: Option<ThemePickerState>,
     pub command_suggestion_index: usize,
+    pub input_cursor_char_index: usize,
+    pub input_cursor_preferred_column: Option<usize>,
     pub quit_armed_until: Option<Instant>,
     should_quit: bool,
 }
@@ -270,6 +323,8 @@ impl App {
             theme: UiTheme::default(),
             theme_picker: None,
             command_suggestion_index: 0,
+            input_cursor_char_index: 0,
+            input_cursor_preferred_column: None,
             quit_armed_until: None,
             should_quit: false,
         }
@@ -477,12 +532,139 @@ impl App {
             return None;
         }
         self.input.clear();
+        self.input_cursor_char_index = 0;
+        self.input_cursor_preferred_column = None;
         self.reset_command_selection();
         Some(trimmed)
     }
 
     fn reset_command_selection(&mut self) {
         self.command_suggestion_index = 0;
+    }
+
+    fn input_char_len(&self) -> usize {
+        self.input.chars().count()
+    }
+
+    fn clear_input_editor_state(&mut self) {
+        self.input_cursor_char_index = self.input_char_len();
+        self.input_cursor_preferred_column = None;
+    }
+
+    fn set_input_text(&mut self, value: String) {
+        self.input = value;
+        self.clear_input_editor_state();
+    }
+
+    fn byte_index_for_char(input: &str, char_index: usize) -> usize {
+        if char_index == 0 {
+            return 0;
+        }
+        let total_chars = input.chars().count();
+        if char_index >= total_chars {
+            return input.len();
+        }
+        input
+            .char_indices()
+            .nth(char_index)
+            .map(|(byte, _)| byte)
+            .unwrap_or(input.len())
+    }
+
+    fn clamp_input_cursor(&mut self) {
+        self.input_cursor_char_index = self.input_cursor_char_index.min(self.input_char_len());
+    }
+
+    fn move_input_cursor_left(&mut self) {
+        self.clamp_input_cursor();
+        self.input_cursor_char_index = self.input_cursor_char_index.saturating_sub(1);
+        self.input_cursor_preferred_column = None;
+    }
+
+    fn move_input_cursor_right(&mut self) {
+        self.clamp_input_cursor();
+        self.input_cursor_char_index =
+            (self.input_cursor_char_index + 1).min(self.input_char_len());
+        self.input_cursor_preferred_column = None;
+    }
+
+    fn input_line_count(&self) -> usize {
+        self.input.split('\n').count().max(1)
+    }
+
+    fn input_line_col_for_cursor(&self) -> (usize, usize) {
+        let cursor = self.input_cursor_char_index.min(self.input_char_len());
+        let mut line = 0_usize;
+        let mut col = 0_usize;
+        for (idx, ch) in self.input.chars().enumerate() {
+            if idx >= cursor {
+                break;
+            }
+            if ch == '\n' {
+                line += 1;
+                col = 0;
+            } else {
+                col += 1;
+            }
+        }
+        (line, col)
+    }
+
+    fn input_char_index_for_line_col(&self, target_line: usize, target_col: usize) -> usize {
+        let lines = self.input.split('\n').collect::<Vec<_>>();
+        let line_index = target_line.min(lines.len().saturating_sub(1));
+        let column = target_col.min(lines[line_index].chars().count());
+        let mut char_index = 0_usize;
+        for line in lines.iter().take(line_index) {
+            char_index += line.chars().count() + 1;
+        }
+        char_index + column
+    }
+
+    fn move_input_cursor_up(&mut self) {
+        let (line, col) = self.input_line_col_for_cursor();
+        if line == 0 {
+            return;
+        }
+        let target_col = self.input_cursor_preferred_column.unwrap_or(col);
+        self.input_cursor_char_index = self.input_char_index_for_line_col(line - 1, target_col);
+        self.input_cursor_preferred_column = Some(target_col);
+    }
+
+    fn move_input_cursor_down(&mut self) {
+        let (line, col) = self.input_line_col_for_cursor();
+        if line + 1 >= self.input_line_count() {
+            return;
+        }
+        let target_col = self.input_cursor_preferred_column.unwrap_or(col);
+        self.input_cursor_char_index = self.input_char_index_for_line_col(line + 1, target_col);
+        self.input_cursor_preferred_column = Some(target_col);
+    }
+
+    fn insert_input_char(&mut self, ch: char) {
+        self.clamp_input_cursor();
+        let insert_at = Self::byte_index_for_char(&self.input, self.input_cursor_char_index);
+        self.input.insert(insert_at, ch);
+        self.input_cursor_char_index += 1;
+        self.input_cursor_preferred_column = None;
+        self.reset_command_selection();
+    }
+
+    fn backspace_input_char(&mut self) {
+        self.clamp_input_cursor();
+        if self.input_cursor_char_index == 0 {
+            return;
+        }
+        let remove_start = Self::byte_index_for_char(&self.input, self.input_cursor_char_index - 1);
+        let remove_end = Self::byte_index_for_char(&self.input, self.input_cursor_char_index);
+        self.input.replace_range(remove_start..remove_end, "");
+        self.input_cursor_char_index -= 1;
+        self.input_cursor_preferred_column = None;
+        self.reset_command_selection();
+    }
+
+    fn insert_newline_at_cursor(&mut self) {
+        self.insert_input_char('\n');
     }
 
     fn to_ollama_messages(&self) -> Vec<ChatMessage> {
@@ -844,7 +1026,7 @@ impl App {
             }
             Some(SidebarItem::WorkspaceCreate) => {
                 self.focus = FocusPane::Chat;
-                self.input = String::from("/workspace create New Workspace --path ");
+                self.set_input_text(String::from("/workspace create New Workspace --path "));
                 self.reset_command_selection();
                 self.set_toast(
                     ToastLevel::Info,
@@ -941,7 +1123,7 @@ impl App {
             .command_suggestion_index
             .min(suggestions.len().saturating_sub(1));
         if let Some(suggestion) = suggestions.get(index) {
-            self.input = suggestion.clone();
+            self.set_input_text(suggestion.clone());
             self.command_suggestion_index = (index + 1) % suggestions.len();
         }
     }
@@ -1559,6 +1741,8 @@ pub async fn run(
     execute!(stdout, EnterAlternateScreen)?;
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
+    let _ = execute!(terminal.backend_mut(), SetCursorStyle::DefaultUserShape);
+    terminal.show_cursor()?;
     let mut last_saved_ui_state = app.snapshot_ui_state();
     let _ = save_ui_state_to_path(&ui_state_path, &last_saved_ui_state);
 
@@ -1630,6 +1814,7 @@ pub async fn run(
                         input::InputAction::DismissOverlay => {
                             if app.is_slash_command_input() && !app.input.trim().is_empty() {
                                 app.input.clear();
+                                app.clear_input_editor_state();
                                 app.reset_command_selection();
                             } else {
                                 app.dismiss_overlay();
@@ -1646,6 +1831,8 @@ pub async fn run(
                                 app.autocomplete_command_prev();
                             } else if app.focus == FocusPane::Workspaces {
                                 app.sidebar_up(amount);
+                            } else if app.focus == FocusPane::Chat && amount == 1 {
+                                app.move_input_cursor_up();
                             } else {
                                 app.scroll_up(amount);
                             }
@@ -1655,20 +1842,36 @@ pub async fn run(
                                 app.autocomplete_command_next();
                             } else if app.focus == FocusPane::Workspaces {
                                 app.sidebar_down(amount);
+                            } else if app.focus == FocusPane::Chat && amount == 1 {
+                                app.move_input_cursor_down();
                             } else {
                                 app.scroll_down(amount);
                             }
                         }
+                        input::InputAction::MoveCursorLeft => {
+                            if app.focus == FocusPane::Chat
+                                || (app.focus == FocusPane::Workspaces
+                                    && app.is_slash_command_input())
+                            {
+                                app.move_input_cursor_left();
+                            }
+                        }
+                        input::InputAction::MoveCursorRight => {
+                            if app.focus == FocusPane::Chat
+                                || (app.focus == FocusPane::Workspaces
+                                    && app.is_slash_command_input())
+                            {
+                                app.move_input_cursor_right();
+                            }
+                        }
                         input::InputAction::Insert(c) => {
                             if app.focus == FocusPane::Chat {
-                                app.input.push(c);
-                                app.reset_command_selection();
+                                app.insert_input_char(c);
                             } else if app.focus == FocusPane::Workspaces {
                                 let can_start_command = app.input.is_empty() && c == '/';
                                 let continue_command = app.is_slash_command_input();
                                 if can_start_command || continue_command {
-                                    app.input.push(c);
-                                    app.reset_command_selection();
+                                    app.insert_input_char(c);
                                 }
                             }
                         }
@@ -1677,8 +1880,7 @@ pub async fn run(
                                 || (app.focus == FocusPane::Workspaces
                                     && app.is_slash_command_input())
                             {
-                                app.input.pop();
-                                app.reset_command_selection();
+                                app.backspace_input_char();
                             }
                         }
                         input::InputAction::NewLine => {
@@ -1724,8 +1926,7 @@ pub async fn run(
                                     }
                                 }
                             } else {
-                                app.input.push('\n');
-                                app.reset_command_selection();
+                                app.insert_newline_at_cursor();
                             }
                         }
                         input::InputAction::Send => {
@@ -1904,6 +2105,7 @@ pub async fn run(
 
     let ui_state = app.snapshot_ui_state();
     disable_raw_mode()?;
+    let _ = execute!(terminal.backend_mut(), SetCursorStyle::DefaultUserShape);
     execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
     terminal.show_cursor()?;
     let _ = save_ui_state_to_path(&ui_state_path, &ui_state);
@@ -3268,6 +3470,21 @@ mod tests {
         assert!(is_cloud_model_name("minimax-m2.7:cloud"));
         assert!(is_cloud_model_name("devstral-2:123b-cloud"));
         assert!(!is_cloud_model_name("qwen2.5-coder:7b"));
+    }
+
+    #[test]
+    fn input_editor_inserts_on_empty_line_after_vertical_move() {
+        let mut app = App::new(
+            String::from("http://localhost:11434"),
+            String::from("llama3.2:latest"),
+        );
+        app.set_input_text(String::from("one\n\nthree"));
+        app.move_input_cursor_up();
+        app.insert_input_char('x');
+
+        assert_eq!(app.input, "one\nx\nthree");
+        let (line, col) = app.input_line_col_for_cursor();
+        assert_eq!((line, col), (1, 1));
     }
 
     #[test]
