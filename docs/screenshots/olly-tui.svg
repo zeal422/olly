@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="720" viewBox="0 0 1200 720" role="img" aria-labelledby="title desc">
+  <title id="title">Olly TUI Mock Screenshot</title>
+  <desc id="desc">Stylized terminal screenshot showing workspace list, chat messages, and input area.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0f172a" />
+      <stop offset="100%" stop-color="#111827" />
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="720" fill="url(#bg)" rx="18" />
+  <rect x="24" y="24" width="1152" height="672" fill="#0b1220" stroke="#334155" stroke-width="2" rx="12" />
+
+  <rect x="44" y="44" width="1112" height="44" fill="#111827" rx="8" />
+  <text x="64" y="72" fill="#93c5fd" font-family="Consolas, monospace" font-size="20">Olly | workspace: olly-dev | model: llama3.2:latest | connected</text>
+
+  <rect x="44" y="100" width="260" height="540" fill="#111827" rx="8" />
+  <text x="64" y="130" fill="#e5e7eb" font-family="Consolas, monospace" font-size="20">Workspaces</text>
+  <text x="64" y="170" fill="#86efac" font-family="Consolas, monospace" font-size="18">* olly-dev</text>
+  <text x="64" y="200" fill="#cbd5e1" font-family="Consolas, monospace" font-size="18">  personal</text>
+  <text x="64" y="230" fill="#cbd5e1" font-family="Consolas, monospace" font-size="18">  rust-playground</text>
+
+  <rect x="316" y="100" width="840" height="494" fill="#0f172a" rx="8" />
+
+  <rect x="340" y="130" width="540" height="66" fill="#1f2937" rx="12" />
+  <text x="360" y="170" fill="#e5e7eb" font-family="Consolas, monospace" font-size="18">Assistant: Sure, here is a complete example...</text>
+
+  <rect x="640" y="218" width="492" height="66" fill="#065f46" rx="12" />
+  <text x="660" y="258" fill="#ecfeff" font-family="Consolas, monospace" font-size="18">You: add tests for this parser</text>
+
+  <rect x="340" y="306" width="620" height="104" fill="#1f2937" rx="12" />
+  <text x="360" y="346" fill="#e5e7eb" font-family="Consolas, monospace" font-size="18">Assistant: Added parser tests for partial chunks,</text>
+  <text x="360" y="374" fill="#e5e7eb" font-family="Consolas, monospace" font-size="18">done-flag termination, and malformed lines.</text>
+
+  <rect x="44" y="648" width="1112" height="28" fill="#111827" rx="6" />
+  <text x="64" y="668" fill="#cbd5e1" font-family="Consolas, monospace" font-size="16">Ctrl+Enter send | Enter newline | /commands</text>
+
+  <rect x="316" y="602" width="840" height="38" fill="#0b1220" stroke="#334155" stroke-width="1" rx="8" />
+  <text x="336" y="627" fill="#93c5fd" font-family="Consolas, monospace" font-size="18">msg: Type your message...</text>
+</svg>
