@@ -14,6 +14,7 @@ Olly is a Rust terminal UI client for Ollama. It focuses on a fast chat loop for
 - Markdown rendering with optional syntax highlighting.
 - Slash-command power features (`/search`, `/export`, `/checkpoint`, `/workspace`, `/session`, `/attach`, `/model`, `/url`).
 - Configurable keybindings and runtime Ollama URL.
+- Improved Windows console stability: startup sizing is normalized and resize handling avoids native scrollbar/layout glitches.
 
 ## Installation
 

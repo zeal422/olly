@@ -19,10 +19,13 @@ The format is based on Keep a Changelog, and this project follows Semantic Versi
 ### Fixed
 - Legacy DB compatibility gap for `messages` metadata by auto-adding missing `images` and `tool_calls` columns during migration.
 - Concurrent DB write stability by applying SQLite busy-timeout handling instead of immediate lock failure in normal contention windows.
+- Windows console startup rendering bug that left a persistent right-side scrollbar gutter until manual unmaximize/maximize.
+- Windows resize instability that could corrupt chat layout when shrinking the window.
 
 ### Modified
 - Slash-command argument handling now strips surrounding quotes for path/name/title values in key command flows (`/workspace create`, `/workspace set-path`, `/export`, `/session rename ... --to ...`).
 - Mock Ollama test harness was extended with delayed-response and abrupt-disconnect server modes to support deterministic network-failure coverage.
+- Windows TUI sizing pipeline now uses deterministic startup normalization (`maximize -> snap to cell grid -> hide native scrollbars -> sync buffer`) and safe runtime resize handling (`terminal.autoresize` + `terminal.clear`).
 
 ## [0.0.6] - 2026-03-29
 

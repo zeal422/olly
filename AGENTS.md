@@ -14,6 +14,7 @@
 - Extensive slash-command system (`/search`, `/export`, `/checkpoint`, `/workspace`, `/session`, `/attach`, `/model`, `/url`, `/themes`)
 - Configurable keybindings and runtime Ollama URL
 - 8 built-in UI themes with live preview
+- Hardened Windows console startup/resize behavior to reduce native scrollbar and layout artifacts
 
 ### Architecture
 
@@ -226,7 +227,7 @@ autocomplete = "Tab"
 | `src/workspace/` | Workspace and session SQLite management |
 | `src/history/` | Chat history persistence |
 | `src/config/` | Configuration loading and defaults |
-| `tests/` | Integration tests (26 test files) |
+| `tests/` | Integration tests (25 test files) |
 | `scripts/` | Build, check, release, installer scripts |
 | `docs/` | Documentation including release policy |
 | `installer/` | Windows installer configuration |
