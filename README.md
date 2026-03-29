@@ -74,17 +74,25 @@ Output:
 ## Configuration Guide
 
 On first run, Olly creates platform-appropriate config and data directories.
+The app stores `config.toml` in the config directory, and runtime data (SQLite DB + UI state) in the data directory.
 
-- Linux: `~/.config/olly/`, `~/.local/share/olly/`, `~/.cache/olly/`
-- macOS: `~/Library/Application Support/olly/`, `~/Library/Caches/olly/`
-- Windows: `%APPDATA%\olly\`, `%LOCALAPPDATA%\olly\cache\`
+- Linux: config `~/.config/olly/`, data `~/.local/share/olly/`
+- macOS: config `~/Library/Application Support/olly/`, data `~/Library/Application Support/olly/`
+- Windows: config `%APPDATA%\olly\`, data `%LOCALAPPDATA%\olly\`
 
 Example `config.toml`:
 
 ```toml
 [ollama]
 url = "http://localhost:11434"
-timeout = 300
+timeout_secs = 300
+
+[defaults]
+model = "llama3.2:latest"
+workspace = "Default Workspace"
+
+[storage]
+db_path = "/path/to/olly/workspaces.db"
 
 [ui]
 syntax_highlighting = true
@@ -97,16 +105,6 @@ help = "F1"
 dismiss = "Esc"
 switch_focus = "Tab"
 autocomplete = "Tab"
-
-[workspace]
-max_context_files = 10
-auto_reload_changes = false
-context_strategy = "files"
-max_file_size_kb = 512
-max_total_context_kb = 2048
-block_sensitive_files = true
-confirm_new_context_on_first_send = true
-exclude_globs = [".env*", "*.pem", "*.key", "id_rsa*", ".git/**", "node_modules/**", "target/**"]
 ```
 
 ## Keyboard Shortcuts
@@ -179,7 +177,7 @@ curl http://localhost:11434/api/tags
 ### Context files are skipped
 
 - Confirm file size fits configured budgets.
-- Check sensitive-file and exclude-glob rules in config.
+- Check built-in safety filters (for example `.env*`, `*.pem`, `*.key`, `id_rsa*`, `.git/`, `node_modules/`, `target/`).
 
 ### Slow rendering in small terminals
 

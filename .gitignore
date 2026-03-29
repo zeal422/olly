@@ -1,5 +1,36 @@
+# Rust / Cargo
 /target
+**/*.rs.bk
+
+# Build artifacts
 /dist
+
+# IDE / Editor
 /.idea
 /.vscode
+*.code-workspace
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.swp
+*.swo
+*~
+
+# Logs
 *.log
+
+# Environment / local secrets
+.env
+.env.*
+!.env.example
+
+# OS noise
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Temp / backup files
+*.tmp
+*.temp
+*.bak
