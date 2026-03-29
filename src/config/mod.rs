@@ -108,7 +108,7 @@ impl Default for KeybindingsConfig {
             send: String::from("Ctrl+Enter"),
             newline: String::from("Enter"),
             quit: String::from("Ctrl+Q"),
-            help: String::from("?"),
+            help: String::from("F1"),
             dismiss: String::from("Esc"),
             switch_focus: String::from("Tab"),
             autocomplete: String::from("Tab"),

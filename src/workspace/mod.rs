@@ -7,6 +7,7 @@ pub mod storage;
 pub struct Workspace {
     pub id: i64,
     pub name: String,
+    pub root_path: Option<String>,
     pub context_paths: Vec<String>,
     pub system_prompt: Option<String>,
     pub model_preset_id: i64,

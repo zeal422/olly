@@ -8,11 +8,11 @@ Olly is a Rust terminal UI client for Ollama. It focuses on a fast chat loop for
 
 - Streaming chat with live token rendering.
 - Model listing and quick model switching.
-- Workspace and conversation persistence with SQLite.
+- Workspace and per-workspace session persistence with SQLite.
 - Full-text search over stored messages.
 - File-context ingestion with safety guardrails.
 - Markdown rendering with optional syntax highlighting.
-- Slash-command power features (`/search`, `/export`, `/checkpoint`, `/workspace`, `/attach`, `/model`, `/url`).
+- Slash-command power features (`/search`, `/export`, `/checkpoint`, `/workspace`, `/session`, `/attach`, `/model`, `/url`).
 - Configurable keybindings and runtime Ollama URL.
 
 ## Installation
@@ -77,7 +77,7 @@ syntax_highlighting = true
 send = "Ctrl+Enter"
 newline = "Enter"
 quit = "Ctrl+Q"
-help = "?"
+help = "F1"
 dismiss = "Esc"
 switch_focus = "Tab"
 autocomplete = "Tab"
@@ -98,18 +98,20 @@ exclude_globs = [".env*", "*.pem", "*.key", "id_rsa*", ".git/**", "node_modules/
 - `Ctrl+Enter`: send message
 - `Enter`: insert newline (or execute slash command)
 - `Ctrl+Q`: quit (press twice)
-- `?`: open/close help
+- `F1`: open/close help
 - `Esc`: close dialogs and clear toasts
-- `Tab`: switch focus (models/chat)
+- `Tab`: switch focus (sidebar/chat)
 - `Up` / `Down`: scroll chat (or move selection when sidebar focused)
 - `PgUp` / `PgDn`: faster scroll
-- `Enter` (sidebar focused): activate selected model/workspace
+- `Enter` (sidebar focused): activate selection (section headers collapse/expand)
 
 ## Slash Commands
 
 - `/commands` list available commands
 - `/models` list cached models
 - `/models refresh` reload model list from Ollama
+- `/models add <model-name-or-ollama-library-url>` add model (pull local or enable cloud)
+- `/models remove <model-name>` remove model from Ollama
 - `/search <query>` search chat history (FTS)
 - `/export json <path>` export conversation as JSON
 - `/export md <path>` export conversation as Markdown
@@ -117,8 +119,24 @@ exclude_globs = [".env*", "*.pem", "*.key", "id_rsa*", ".git/**", "node_modules/
 - `/checkpoint restore <name>` restore checkpoint into a new branch conversation
 - `/workspace list` list known workspaces
 - `/workspace switch <id|name>` switch active workspace
+- `/workspace create <name> --path <folder>` create and switch using an explicit folder
+- `/workspace create --path <folder>` create with auto-name (`New Workspace`, `New Workspace 2`, ...)
+- `/workspace rename <new name>` rename selected workspace (or active workspace if none selected)
+- `/workspace delete` open delete modal for selected workspace (or active one)
+- `/workspace delete <id|name>` optional explicit delete target
+- `Enter` confirms delete modal, `Esc` cancels it
+- Deleting the last workspace is allowed; Olly will show a welcome screen until you create one
+- `/workspace where` show active workspace path
+- `/workspace set-path <id|name> --path <folder>` update workspace root folder
 - `/workspace export <path>` export workspace bundle
 - `/workspace import <path>` import workspace bundle
+- `/session list` list sessions in current workspace
+- `/session new <title>` create and switch to a new session
+- `/session create <title>` alias of `/session new`
+- `/session switch <id|title>` switch current session
+- `/session rename <id> <new title>` rename a session by id
+- `/session rename <title> --to <new title>` rename a session by current title
+- `/session delete [id|title]` delete selected/active session (or explicit target)
 - `/attach <image_path>` queue image attachment(s)
 - `/clear-attachments` clear queued attachments
 - `/model <name>` switch active model

@@ -23,7 +23,7 @@ fn ctrl_q_quits() {
 fn navigation_and_help_keys() {
     let up = KeyEvent::new(KeyCode::Up, KeyModifiers::NONE);
     let page_down = KeyEvent::new(KeyCode::PageDown, KeyModifiers::NONE);
-    let help = KeyEvent::new(KeyCode::Char('?'), KeyModifiers::NONE);
+    let help = KeyEvent::new(KeyCode::F(1), KeyModifiers::NONE);
     let esc = KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE);
     let tab = KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE);
 
@@ -32,6 +32,12 @@ fn navigation_and_help_keys() {
     assert_eq!(resolve_key_event(help), InputAction::ToggleHelp);
     assert_eq!(resolve_key_event(esc), InputAction::DismissOverlay);
     assert_eq!(resolve_key_event(tab), InputAction::SwitchFocus);
+}
+
+#[test]
+fn question_mark_is_inserted_not_help() {
+    let question = KeyEvent::new(KeyCode::Char('?'), KeyModifiers::SHIFT);
+    assert_eq!(resolve_key_event(question), InputAction::Insert('?'));
 }
 
 #[test]
