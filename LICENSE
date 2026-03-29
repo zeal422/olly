@@ -1,4 +1,43 @@
-This project is dual-licensed under either of the following, at your option:
+VectorMedia Proprietary Software License
+Copyright (c) 2026 VectorMedia. All rights reserved.
 
-- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE))
-- MIT license ([LICENSE-MIT](LICENSE-MIT))
+This software and all associated source code, binaries, assets, and documentation
+("Software") are proprietary to VectorMedia.
+
+1. Grant of Use
+You are granted a limited, non-exclusive, non-transferable, revocable license to
+install and use the Software solely in accordance with VectorMedia's Terms of Service
+and any written agreement provided by VectorMedia.
+
+2. Restrictions
+Except where explicitly permitted in writing by VectorMedia, you may not:
+- modify, adapt, translate, or create derivative works of the Software;
+- reverse engineer, decompile, disassemble, or otherwise attempt to derive source,
+  structure, or underlying ideas from the Software;
+- redistribute, sublicense, lease, rent, lend, sell, assign, or otherwise transfer
+  the Software to any third party;
+- remove, alter, or obscure proprietary notices, branding, or copyright statements.
+
+3. Ownership
+VectorMedia and its licensors retain all right, title, and interest in and to the
+Software, including all intellectual property rights. No ownership rights are
+transferred to you.
+
+4. Termination
+This license terminates automatically if you violate any term of this license or
+applicable Terms of Service. Upon termination, you must stop using the Software and
+delete all copies in your possession or control.
+
+5. Disclaimer of Warranties
+The Software is provided "AS IS" and "AS AVAILABLE" without warranties of any kind,
+express or implied, including merchantability, fitness for a particular purpose, and
+non-infringement, to the maximum extent permitted by law.
+
+6. Limitation of Liability
+To the maximum extent permitted by law, VectorMedia shall not be liable for indirect,
+incidental, special, consequential, exemplary, or punitive damages, or for lost data,
+profits, revenue, or business interruption, arising from or related to the Software.
+
+7. Contact
+For licensing requests (including permission to modify or distribute), contact
+VectorMedia.

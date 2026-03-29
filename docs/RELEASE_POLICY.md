@@ -25,6 +25,7 @@ A release can be cut only when all required gates pass in CI.
 4. Release artifacts:
 - Platform archives uploaded to GitHub Releases
 - `SHA256SUMS.txt` generated and uploaded
+- Windows installer (`olly-vX.Y.Z-windows-installer.exe`) generated and uploaded for tagged releases
 
 ## Changelog Policy
 
@@ -39,6 +40,12 @@ PowerShell:
 
 ```powershell
 ./scripts/release.ps1
+```
+
+Windows installer build:
+
+```powershell
+./scripts/build-installer.ps1
 ```
 
 ## crates.io Publishing

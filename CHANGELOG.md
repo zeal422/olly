@@ -21,6 +21,7 @@ The format is based on Keep a Changelog, and this project follows Semantic Versi
 - Delete confirmation modal UX for workspaces (Enter confirm, Esc cancel).
 - Welcome screen in chat area when no workspace is active, including quick-start guidance.
 - Model management commands: `/models add <model-name-or-ollama-library-url>` and `/models remove <model-name>`.
+- Windows installer support via Inno Setup (`installer/olly.iss`) plus build script (`scripts/build-installer.ps1`) producing `Olly-Setup-<version>.exe`.
 
 ### Fixed
 - Resolved sidebar/input conflict so command suggestion navigation and sidebar navigation no longer fight for `Up/Down` behavior.
@@ -38,6 +39,8 @@ The format is based on Keep a Changelog, and this project follows Semantic Versi
 - Startup/session state handling now supports a no-active-workspace mode and gracefully restores active context when available.
 - Model command wording now differentiates local vs cloud behavior (`pull local or enable cloud`) and uses "enabled" messaging in toasts/help text.
 - README command documentation was updated to reflect new workspace/session behaviors and modal confirmation flow.
+- Release/installation documentation now includes Windows installer generation and artifact expectations.
+- Licensing was consolidated to a single proprietary VectorMedia license (`LICENSE`) and dual-license references were removed.
 
 ## [0.0.5] - 2026-03-29
 

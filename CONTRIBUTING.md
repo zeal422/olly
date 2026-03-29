@@ -70,4 +70,6 @@ If you discover a security issue, please open a private report with maintainers 
 
 ## License
 
-By contributing, you agree your contributions are licensed under `MIT OR Apache-2.0`.
+By contributing, you agree that your contributions are provided to VectorMedia for inclusion
+in a proprietary codebase and may be used, modified, and distributed by VectorMedia under
+the project license.

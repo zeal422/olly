@@ -21,6 +21,8 @@ Olly is a Rust terminal UI client for Ollama. It focuses on a fast chat loop for
 
 Download the latest archive for your platform from [GitHub Releases](https://github.com/yourname/olly/releases).
 
+For Windows, you can also use the installer artifact: `Olly-Setup-<version>.exe`.
+
 Supported release targets:
 - Linux: `x86_64-unknown-linux-gnu`, `aarch64-unknown-linux-gnu`
 - macOS: `x86_64-apple-darwin`, `aarch64-apple-darwin`
@@ -47,6 +49,20 @@ Run with:
 ```bash
 cargo run -- --url http://localhost:11434 --model llama3.2:latest
 ```
+
+### Option 4: Build Windows Installer From Source
+
+Requirements:
+- Inno Setup 6 (`ISCC.exe`) installed on Windows.
+
+Build installer:
+
+```powershell
+./scripts/build-installer.ps1
+```
+
+Output:
+- `dist/windows-installer/Olly-Setup-<version>.exe`
 
 ## Quick Start
 
@@ -186,7 +202,7 @@ PowerShell:
 
 - CI fast gate (PR): `fmt`, `clippy`, required smoke/integration tests.
 - Full gate (merge/nightly): all targets/features tests.
-- Release pipeline: cross-platform matrix build, archive upload, SHA256 checksums, GitHub release upload.
+- Release pipeline: cross-platform matrix build, archive upload, Windows installer build, SHA256 checksums, GitHub release upload.
 - Changelog generation: `git-cliff` (see `.git-cliff.toml`).
 
 Local release prep:
@@ -207,9 +223,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
-Dual-licensed under either:
+Proprietary software owned by VectorMedia.
 
-- MIT license ([LICENSE-MIT](LICENSE-MIT))
-- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE))
-
-at your option.
+Use is subject to the terms in [LICENSE](LICENSE), including restrictions on
+reverse engineering, modification, and redistribution without explicit written permission.

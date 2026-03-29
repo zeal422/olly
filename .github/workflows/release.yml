@@ -99,6 +99,19 @@ jobs:
           $archiveName = "olly-${{ github.ref_name }}-${{ matrix.artifact_suffix }}.${{ matrix.archive_ext }}"
           Compress-Archive -Path "target/${{ matrix.target }}/release/olly.exe" -DestinationPath "dist/$archiveName" -Force
 
+      - name: Install Inno Setup (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: choco install innosetup --no-progress -y
+
+      - name: Build installer (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $version = "${{ github.ref_name }}".TrimStart('v')
+          ./scripts/build-installer.ps1 -SkipBuild -Target "${{ matrix.target }}" -Version $version
+          Copy-Item "dist/windows-installer/Olly-Setup-$version.exe" "dist/olly-${{ github.ref_name }}-windows-installer.exe" -Force
+
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
