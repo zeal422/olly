@@ -131,7 +131,5 @@ fn search_over_large_message_corpus_returns_expected_hits() {
         .search_messages("criticaltoken")
         .expect("search messages");
     assert_eq!(hits.len(), 8);
-    assert!(hits
-        .iter()
-        .all(|hit| hit.content.contains("criticaltoken")));
+    assert!(hits.iter().all(|hit| hit.content.contains("criticaltoken")));
 }

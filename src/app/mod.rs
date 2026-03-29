@@ -45,6 +45,33 @@ const COMMAND_SUGGESTIONS: &[&str] = &[
 ];
 const AUTO_SCROLL_TARGET: u16 = 30_000;
 
+#[cfg(windows)]
+fn maximize_console_window() {
+    #[link(name = "Kernel32")]
+    extern "system" {
+        fn GetConsoleWindow() -> *mut core::ffi::c_void;
+    }
+
+    #[link(name = "User32")]
+    extern "system" {
+        fn ShowWindow(hwnd: *mut core::ffi::c_void, command: i32) -> i32;
+    }
+
+    const SW_MAXIMIZE: i32 = 3;
+
+    // SAFETY: We only call Win32 APIs with the process console window handle.
+    // If no console exists, the pointer is null and we simply no-op.
+    unsafe {
+        let hwnd = GetConsoleWindow();
+        if !hwnd.is_null() {
+            let _ = ShowWindow(hwnd, SW_MAXIMIZE);
+        }
+    }
+}
+
+#[cfg(not(windows))]
+fn maximize_console_window() {}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "kebab-case")]
 pub enum UiTheme {
@@ -1527,6 +1554,7 @@ pub async fn run(
     }
 
     let mut stdout = io::stdout();
+    maximize_console_window();
     enable_raw_mode()?;
     execute!(stdout, EnterAlternateScreen)?;
     let backend = CrosstermBackend::new(stdout);
