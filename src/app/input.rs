@@ -68,6 +68,18 @@ impl InputBinding {
             "enter" => KeyCode::Enter,
             "tab" => KeyCode::Tab,
             "esc" | "escape" => KeyCode::Esc,
+            "f1" => KeyCode::F(1),
+            "f2" => KeyCode::F(2),
+            "f3" => KeyCode::F(3),
+            "f4" => KeyCode::F(4),
+            "f5" => KeyCode::F(5),
+            "f6" => KeyCode::F(6),
+            "f7" => KeyCode::F(7),
+            "f8" => KeyCode::F(8),
+            "f9" => KeyCode::F(9),
+            "f10" => KeyCode::F(10),
+            "f11" => KeyCode::F(11),
+            "f12" => KeyCode::F(12),
             "up" => KeyCode::Up,
             "down" => KeyCode::Down,
             "pgup" | "pageup" => KeyCode::PageUp,
@@ -91,7 +103,7 @@ impl Default for InputBindings {
             send: InputBinding::from_string("Ctrl+Enter").unwrap_or_default(),
             newline: InputBinding::from_string("Enter").unwrap_or_default(),
             quit: InputBinding::from_string("Ctrl+Q").unwrap_or_default(),
-            help: InputBinding::from_string("?").unwrap_or_default(),
+            help: InputBinding::from_string("F1").unwrap_or_default(),
             dismiss: InputBinding::from_string("Esc").unwrap_or_default(),
             switch_focus: InputBinding::from_string("Tab").unwrap_or_default(),
             autocomplete: InputBinding::from_string("Tab").unwrap_or_default(),
@@ -102,11 +114,23 @@ impl Default for InputBindings {
 impl InputBindings {
     pub fn from_config(config: &KeybindingsConfig) -> Self {
         let defaults = Self::default();
+        let configured_help = InputBinding::from_string(&config.help);
+        let normalized_help = match configured_help {
+            // Keep '?' available for normal typing in chat.
+            Some(InputBinding {
+                code: KeyCode::Char('?'),
+                modifiers,
+            }) if modifiers == KeyModifiers::NONE || modifiers == KeyModifiers::SHIFT => {
+                defaults.help
+            }
+            Some(binding) => binding,
+            None => defaults.help,
+        };
         Self {
             send: InputBinding::from_string(&config.send).unwrap_or(defaults.send),
             newline: InputBinding::from_string(&config.newline).unwrap_or(defaults.newline),
             quit: InputBinding::from_string(&config.quit).unwrap_or(defaults.quit),
-            help: InputBinding::from_string(&config.help).unwrap_or(defaults.help),
+            help: normalized_help,
             dismiss: InputBinding::from_string(&config.dismiss).unwrap_or(defaults.dismiss),
             switch_focus: InputBinding::from_string(&config.switch_focus)
                 .unwrap_or(defaults.switch_focus),

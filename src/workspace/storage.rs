@@ -37,6 +37,7 @@ impl Storage {
             CREATE TABLE IF NOT EXISTS workspaces (
                 id INTEGER PRIMARY KEY,
                 name TEXT NOT NULL UNIQUE,
+                root_path TEXT,
                 context_paths TEXT NOT NULL DEFAULT '[]',
                 system_prompt TEXT,
                 model_preset_id INTEGER NOT NULL,
@@ -110,6 +111,22 @@ impl Storage {
             END;
             "#,
         )?;
+        self.ensure_workspace_root_path_column()?;
+        Ok(())
+    }
+
+    fn ensure_workspace_root_path_column(&self) -> Result<(), WorkspaceError> {
+        let mut statement = self.conn.prepare("PRAGMA table_info(workspaces)")?;
+        let mut rows = statement.query([])?;
+        while let Some(row) = rows.next()? {
+            let column_name: String = row.get(1)?;
+            if column_name == "root_path" {
+                return Ok(());
+            }
+        }
+
+        self.conn
+            .execute("ALTER TABLE workspaces ADD COLUMN root_path TEXT", [])?;
         Ok(())
     }
 
@@ -137,11 +154,12 @@ impl Storage {
         &self,
         name: &str,
         model_preset_id: i64,
+        root_path: Option<&str>,
         system_prompt: Option<&str>,
     ) -> Result<i64, WorkspaceError> {
         self.conn.execute(
-            "INSERT INTO workspaces (name, model_preset_id, system_prompt, context_paths) VALUES (?1, ?2, ?3, '[]')",
-            params![name, model_preset_id, system_prompt],
+            "INSERT INTO workspaces (name, root_path, model_preset_id, system_prompt, context_paths) VALUES (?1, ?2, ?3, ?4, '[]')",
+            params![name, root_path, model_preset_id, system_prompt],
         )?;
         Ok(self.conn.last_insert_rowid())
     }
@@ -149,18 +167,19 @@ impl Storage {
     pub fn get_workspace_by_name(&self, name: &str) -> Result<Option<Workspace>, WorkspaceError> {
         self.conn
             .query_row(
-                "SELECT id, name, context_paths, system_prompt, model_preset_id FROM workspaces WHERE name = ?1",
+                "SELECT id, name, root_path, context_paths, system_prompt, model_preset_id FROM workspaces WHERE name = ?1",
                 params![name],
                 |row| {
-                    let context_paths_json: String = row.get(2)?;
+                    let context_paths_json: String = row.get(3)?;
                     let context_paths = serde_json::from_str::<Vec<String>>(&context_paths_json)
                         .unwrap_or_default();
                     Ok(Workspace {
                         id: row.get(0)?,
                         name: row.get(1)?,
+                        root_path: row.get(2)?,
                         context_paths,
-                        system_prompt: row.get(3)?,
-                        model_preset_id: row.get(4)?,
+                        system_prompt: row.get(4)?,
+                        model_preset_id: row.get(5)?,
                     })
                 },
             )
@@ -171,18 +190,19 @@ impl Storage {
     pub fn get_workspace_by_id(&self, id: i64) -> Result<Option<Workspace>, WorkspaceError> {
         self.conn
             .query_row(
-                "SELECT id, name, context_paths, system_prompt, model_preset_id FROM workspaces WHERE id = ?1",
+                "SELECT id, name, root_path, context_paths, system_prompt, model_preset_id FROM workspaces WHERE id = ?1",
                 params![id],
                 |row| {
-                    let context_paths_json: String = row.get(2)?;
+                    let context_paths_json: String = row.get(3)?;
                     let context_paths =
                         serde_json::from_str::<Vec<String>>(&context_paths_json).unwrap_or_default();
                     Ok(Workspace {
                         id: row.get(0)?,
                         name: row.get(1)?,
+                        root_path: row.get(2)?,
                         context_paths,
-                        system_prompt: row.get(3)?,
-                        model_preset_id: row.get(4)?,
+                        system_prompt: row.get(4)?,
+                        model_preset_id: row.get(5)?,
                     })
                 },
             )
@@ -192,18 +212,19 @@ impl Storage {
 
     pub fn list_workspaces(&self) -> Result<Vec<Workspace>, WorkspaceError> {
         let mut statement = self.conn.prepare(
-            "SELECT id, name, context_paths, system_prompt, model_preset_id FROM workspaces ORDER BY id ASC",
+            "SELECT id, name, root_path, context_paths, system_prompt, model_preset_id FROM workspaces ORDER BY id ASC",
         )?;
         let rows = statement.query_map([], |row| {
-            let context_paths_json: String = row.get(2)?;
+            let context_paths_json: String = row.get(3)?;
             let context_paths =
                 serde_json::from_str::<Vec<String>>(&context_paths_json).unwrap_or_default();
             Ok(Workspace {
                 id: row.get(0)?,
                 name: row.get(1)?,
+                root_path: row.get(2)?,
                 context_paths,
-                system_prompt: row.get(3)?,
-                model_preset_id: row.get(4)?,
+                system_prompt: row.get(4)?,
+                model_preset_id: row.get(5)?,
             })
         })?;
         let mut workspaces = Vec::new();
@@ -218,6 +239,36 @@ impl Storage {
             "DELETE FROM workspaces WHERE id = ?1",
             params![workspace_id],
         )?;
+        Ok(())
+    }
+
+    pub fn rename_workspace(&self, workspace_id: i64, name: &str) -> Result<(), WorkspaceError> {
+        let updated = self.conn.execute(
+            "UPDATE workspaces SET name = ?1 WHERE id = ?2",
+            params![name, workspace_id],
+        )?;
+        if updated == 0 {
+            return Err(WorkspaceError::NotFound(format!(
+                "workspace {workspace_id}"
+            )));
+        }
+        Ok(())
+    }
+
+    pub fn update_workspace_root_path(
+        &self,
+        workspace_id: i64,
+        root_path: Option<&str>,
+    ) -> Result<(), WorkspaceError> {
+        let updated = self.conn.execute(
+            "UPDATE workspaces SET root_path = ?1 WHERE id = ?2",
+            params![root_path, workspace_id],
+        )?;
+        if updated == 0 {
+            return Err(WorkspaceError::NotFound(format!(
+                "workspace {workspace_id}"
+            )));
+        }
         Ok(())
     }
 
@@ -272,6 +323,36 @@ impl Storage {
             conversations.push(row?);
         }
         Ok(conversations)
+    }
+
+    pub fn rename_conversation(
+        &self,
+        conversation_id: i64,
+        title: &str,
+    ) -> Result<(), WorkspaceError> {
+        let updated = self.conn.execute(
+            "UPDATE conversations SET title = ?1 WHERE id = ?2",
+            params![title, conversation_id],
+        )?;
+        if updated == 0 {
+            return Err(WorkspaceError::NotFound(format!(
+                "conversation {conversation_id}"
+            )));
+        }
+        Ok(())
+    }
+
+    pub fn delete_conversation(&self, conversation_id: i64) -> Result<(), WorkspaceError> {
+        let deleted = self.conn.execute(
+            "DELETE FROM conversations WHERE id = ?1",
+            params![conversation_id],
+        )?;
+        if deleted == 0 {
+            return Err(WorkspaceError::NotFound(format!(
+                "conversation {conversation_id}"
+            )));
+        }
+        Ok(())
     }
 
     pub fn save_message(

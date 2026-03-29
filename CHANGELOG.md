@@ -4,6 +4,39 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project follows Semantic Versioning.
 
+## [0.0.6] - 2026-03-29
+
+### Added
+- Session rename command support: `/session rename <id> <new title>` and `/session rename <title> --to <new title>`.
+- Session lifecycle commands: `/session create <title>` (alias of `new`) and `/session delete [id|title]` with selected/active default targeting.
+- Workspace root-path persistence (`root_path`) with DB migration support for existing installations.
+- New workspace path commands: `/workspace where` and `/workspace set-path <id|name> --path <folder>`.
+- Workspace rename command: `/workspace rename <new name>`, targeting selected workspace in sidebar (or active workspace fallback) without requiring IDs.
+- Filesystem-aware path suggestions for workspace commands that use `--path`.
+- Sidebar nesting of sessions under their respective workspace, with per-workspace session collapse/expand behavior.
+- Sidebar model grouping under `Cloud` and `Local` subcategories with independent collapse/expand behavior.
+- Chat footer context strip (inside chat panel) showing active session/workspace context without overlapping message content.
+- Delete confirmation modal UX for workspaces (Enter confirm, Esc cancel).
+- Welcome screen in chat area when no workspace is active, including quick-start guidance.
+- Model management commands: `/models add <model-name-or-ollama-library-url>` and `/models remove <model-name>`.
+
+### Fixed
+- Resolved sidebar/input conflict so command suggestion navigation and sidebar navigation no longer fight for `Up/Down` behavior.
+- Prevented accidental command auto-selection from arrow movement; command selection now applies only when explicitly accepted.
+- Fixed slash-command usability while sidebar-focused by allowing slash-command typing and execution without forcing focus switch.
+- Fixed ambiguous session visibility by making session hierarchy explicit under each workspace in the sidebar.
+- Fixed inability to delete the last workspace by supporting a safe zero-workspace state.
+- Fixed command dismissal UX so `Esc` clears typed slash commands directly from input.
+- Fixed truncated selected-item readability on smaller terminals via marquee-style horizontal scrolling in the sidebar.
+
+### Modified
+- Workspace creation defaults now use human-friendly auto names (`New Workspace`, `New Workspace 2`, ... ) when no name is provided.
+- Sidebar presentation was refined to improve readability on smaller screens and reduce redundant path clutter.
+- Workspace delete flow now defaults to currently selected workspace context, with optional explicit target still supported.
+- Startup/session state handling now supports a no-active-workspace mode and gracefully restores active context when available.
+- Model command wording now differentiates local vs cloud behavior (`pull local or enable cloud`) and uses "enabled" messaging in toasts/help text.
+- README command documentation was updated to reflect new workspace/session behaviors and modal confirmation flow.
+
 ## [0.0.5] - 2026-03-29
 
 ### Added

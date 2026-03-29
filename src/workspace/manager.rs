@@ -11,7 +11,7 @@ use crate::{
         context::{file_meta_for_workspace, has_hash_changed, read_file},
         error::WorkspaceError,
         storage::Storage,
-        ContextFileMeta, ConversationMessage, SearchHit, Workspace, WorkspaceSession,
+        ContextFileMeta, Conversation, ConversationMessage, SearchHit, Workspace, WorkspaceSession,
     },
 };
 
@@ -34,6 +34,8 @@ struct ExportConversation {
 struct ExportWorkspace {
     version: u32,
     name: String,
+    #[serde(default)]
+    root_path: Option<String>,
     context_paths: Vec<String>,
     conversations: Vec<ExportConversation>,
 }
@@ -57,12 +59,23 @@ impl WorkspaceManager {
         let preset_id = self
             .storage
             .get_or_create_preset("Default", default_model)?;
+        let default_root_path = std::env::current_dir()
+            .ok()
+            .map(|path| path.to_string_lossy().into_owned());
         let workspace_id =
             if let Some(existing) = self.storage.get_workspace_by_name(workspace_name)? {
+                if existing.root_path.is_none() {
+                    self.storage
+                        .update_workspace_root_path(existing.id, default_root_path.as_deref())?;
+                }
                 existing.id
             } else {
-                self.storage
-                    .create_workspace(workspace_name, preset_id, None)?
+                self.storage.create_workspace(
+                    workspace_name,
+                    preset_id,
+                    default_root_path.as_deref(),
+                    None,
+                )?
             };
         let conversation_id =
             if let Some(existing) = self.storage.latest_conversation(workspace_id)? {
@@ -115,11 +128,19 @@ impl WorkspaceManager {
         &self,
         name: &str,
         default_model: &str,
+        root_path: Option<&Path>,
     ) -> Result<WorkspaceSession, WorkspaceError> {
         let preset_id = self
             .storage
             .get_or_create_preset(&format!("{name} Preset"), default_model)?;
-        let workspace_id = self.storage.create_workspace(name, preset_id, None)?;
+        let normalized_root = if let Some(path) = root_path {
+            Some(normalize_root_path(path)?)
+        } else {
+            None
+        };
+        let workspace_id =
+            self.storage
+                .create_workspace(name, preset_id, normalized_root.as_deref(), None)?;
         let conversation_id = self
             .storage
             .create_conversation(workspace_id, Some("Main Conversation"))?;
@@ -132,6 +153,44 @@ impl WorkspaceManager {
 
     pub fn delete_workspace(&self, workspace_id: i64) -> Result<(), WorkspaceError> {
         self.storage.delete_workspace(workspace_id)
+    }
+
+    pub fn rename_workspace(&self, workspace_id: i64, name: &str) -> Result<(), WorkspaceError> {
+        self.storage.rename_workspace(workspace_id, name)
+    }
+
+    pub fn set_workspace_root_path(
+        &self,
+        workspace_id: i64,
+        root_path: &Path,
+    ) -> Result<String, WorkspaceError> {
+        let normalized = normalize_root_path(root_path)?;
+        self.storage
+            .update_workspace_root_path(workspace_id, Some(&normalized))?;
+        Ok(normalized)
+    }
+
+    pub fn list_conversations(
+        &self,
+        workspace_id: i64,
+    ) -> Result<Vec<Conversation>, WorkspaceError> {
+        self.storage.list_conversations(workspace_id)
+    }
+
+    pub fn create_session(
+        &self,
+        workspace_id: i64,
+        title: Option<&str>,
+    ) -> Result<i64, WorkspaceError> {
+        self.storage.create_conversation(workspace_id, title)
+    }
+
+    pub fn rename_session(&self, conversation_id: i64, title: &str) -> Result<(), WorkspaceError> {
+        self.storage.rename_conversation(conversation_id, title)
+    }
+
+    pub fn delete_session(&self, conversation_id: i64) -> Result<(), WorkspaceError> {
+        self.storage.delete_conversation(conversation_id)
     }
 
     pub fn save_message(
@@ -315,6 +374,7 @@ impl WorkspaceManager {
         let payload = ExportWorkspace {
             version: 1,
             name: workspace.name,
+            root_path: workspace.root_path,
             context_paths: workspace.context_paths,
             conversations: exported_conversations,
         };
@@ -335,7 +395,24 @@ impl WorkspaceManager {
         let payload: ExportWorkspace = serde_json::from_str(&raw)?;
 
         let workspace_name = dedupe_workspace_name(&self.storage.list_workspaces()?, &payload.name);
-        let session = self.create_workspace(&workspace_name, default_model)?;
+        let root_path = payload
+            .root_path
+            .as_ref()
+            .map(PathBuf::from)
+            .and_then(|candidate| {
+                let absolute = if candidate.is_absolute() {
+                    candidate
+                } else {
+                    std::env::current_dir().ok()?.join(candidate)
+                };
+                if absolute.is_dir() {
+                    Some(absolute)
+                } else {
+                    None
+                }
+            });
+        let session =
+            self.create_workspace(&workspace_name, default_model, root_path.as_deref())?;
         for context_path in payload.context_paths {
             let _ = self.add_context_file(session.workspace_id, &PathBuf::from(context_path));
         }
@@ -382,4 +459,26 @@ fn dedupe_workspace_name(existing: &[Workspace], desired: &str) -> String {
         }
         idx += 1;
     }
+}
+
+fn normalize_root_path(path: &Path) -> Result<String, WorkspaceError> {
+    let absolute = if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        std::env::current_dir()?.join(path)
+    };
+    if !absolute.exists() {
+        return Err(WorkspaceError::NotFound(format!(
+            "workspace root path not found: {}",
+            absolute.display()
+        )));
+    }
+    if !absolute.is_dir() {
+        return Err(WorkspaceError::NotFound(format!(
+            "workspace root path is not a directory: {}",
+            absolute.display()
+        )));
+    }
+    let canonical = std::fs::canonicalize(absolute)?;
+    Ok(canonical.to_string_lossy().into_owned())
 }

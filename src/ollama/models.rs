@@ -1,6 +1,7 @@
 use std::time::{Duration, SystemTime};
 
 use serde::Deserialize;
+use serde::Serialize;
 
 use super::error::OllamaError;
 
@@ -29,6 +30,60 @@ pub async fn list_models(
 
     let payload: TagsResponse = response.json().await?;
     Ok(payload.models.into_iter().map(|m| m.name).collect())
+}
+
+#[derive(Debug, Serialize)]
+struct ModelNameRequest<'a> {
+    name: &'a str,
+}
+
+#[derive(Debug, Serialize)]
+struct PullModelRequest<'a> {
+    name: &'a str,
+    stream: bool,
+}
+
+pub async fn pull_model(
+    client: &reqwest::Client,
+    base_url: &str,
+    model: &str,
+) -> Result<(), OllamaError> {
+    let url = format!("{base_url}/api/pull");
+    let response = client
+        .post(url)
+        .json(&PullModelRequest {
+            name: model,
+            stream: false,
+        })
+        .send()
+        .await?;
+    if !response.status().is_success() {
+        return Err(OllamaError::Api(format!(
+            "status {}",
+            response.status().as_u16()
+        )));
+    }
+    Ok(())
+}
+
+pub async fn delete_model(
+    client: &reqwest::Client,
+    base_url: &str,
+    model: &str,
+) -> Result<(), OllamaError> {
+    let url = format!("{base_url}/api/delete");
+    let response = client
+        .delete(url)
+        .json(&ModelNameRequest { name: model })
+        .send()
+        .await?;
+    if !response.status().is_success() {
+        return Err(OllamaError::Api(format!(
+            "status {}",
+            response.status().as_u16()
+        )));
+    }
+    Ok(())
 }
 
 #[derive(Debug, Clone)]
