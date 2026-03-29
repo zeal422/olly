@@ -112,6 +112,7 @@ exclude_globs = [".env*", "*.pem", "*.key", "id_rsa*", ".git/**", "node_modules/
 - `/models refresh` reload model list from Ollama
 - `/models add <model-name-or-ollama-library-url>` add model (pull local or enable cloud)
 - `/models remove <model-name>` remove model from Ollama
+- `/themes` open theme picker modal (live preview with Up/Down, Enter keep, Esc cancel)
 - `/search <query>` search chat history (FTS)
 - `/export json <path>` export conversation as JSON
 - `/export md <path>` export conversation as Markdown

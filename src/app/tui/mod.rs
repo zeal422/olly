@@ -14,7 +14,7 @@ use syntect::{
 };
 
 use crate::app::{
-    App, ConnectionStatus, FocusPane, ModelBucket, SidebarItem, SidebarSection, ToastLevel,
+    App, ConnectionStatus, FocusPane, ModelBucket, SidebarItem, SidebarSection, ToastLevel, UiTheme,
 };
 
 const SPINNER_FRAMES: &[&str] = &["|", "/", "-", "\\"];
@@ -41,10 +41,449 @@ fn syntax_engine() -> Option<&'static SyntaxEngine> {
         .as_ref()
 }
 
+#[derive(Debug, Clone, Copy)]
+struct ThemePalette {
+    status_fg: Color,
+    status_bg: Color,
+    border_active: Color,
+    border_inactive: Color,
+    sidebar_text: Color,
+    chat_text: Color,
+    body_muted: Color,
+    footer_hint: Color,
+    footer_context: Color,
+    input_text: Color,
+    input_border: Color,
+    toast_fg: Color,
+    toast_info_bg: Color,
+    toast_success_bg: Color,
+    toast_error_bg: Color,
+    help_fg: Color,
+    help_bg: Color,
+    help_border: Color,
+    modal_fg: Color,
+    modal_bg: Color,
+    modal_border: Color,
+    autocomplete_text: Color,
+    autocomplete_border: Color,
+    you_fg: Color,
+    you_bg: Color,
+    you_header: Color,
+    assistant_fg: Color,
+    assistant_bg: Color,
+    assistant_header: Color,
+    tool_fg: Color,
+    tool_bg: Color,
+    tool_header: Color,
+    system_fg: Color,
+    system_bg: Color,
+    system_header: Color,
+    image_badge_fg: Color,
+    image_badge_bg: Color,
+    code_fg: Color,
+    code_bg: Color,
+    inline_code_fg: Color,
+    inline_code_bg: Color,
+}
+
+fn theme_palette(theme: UiTheme) -> ThemePalette {
+    match theme {
+        UiTheme::EmeraldDusk => ThemePalette {
+            status_fg: Color::Black,
+            status_bg: Color::Rgb(112, 230, 174),
+            border_active: Color::Rgb(70, 190, 140),
+            border_inactive: Color::Rgb(88, 98, 110),
+            sidebar_text: Color::Rgb(210, 220, 224),
+            chat_text: Color::White,
+            body_muted: Color::Rgb(205, 220, 228),
+            footer_hint: Color::Rgb(148, 176, 188),
+            footer_context: Color::Rgb(130, 150, 160),
+            input_text: Color::Rgb(230, 240, 240),
+            input_border: Color::Rgb(60, 130, 110),
+            toast_fg: Color::White,
+            toast_info_bg: Color::Rgb(20, 63, 114),
+            toast_success_bg: Color::Rgb(13, 97, 65),
+            toast_error_bg: Color::Rgb(120, 33, 33),
+            help_fg: Color::White,
+            help_bg: Color::Rgb(16, 21, 28),
+            help_border: Color::Rgb(96, 212, 165),
+            modal_fg: Color::White,
+            modal_bg: Color::Rgb(22, 18, 18),
+            modal_border: Color::Rgb(235, 114, 114),
+            autocomplete_text: Color::Rgb(205, 224, 239),
+            autocomplete_border: Color::Rgb(100, 175, 220),
+            you_fg: Color::Black,
+            you_bg: Color::Rgb(112, 230, 174),
+            you_header: Color::Rgb(220, 255, 240),
+            assistant_fg: Color::Rgb(225, 232, 238),
+            assistant_bg: Color::Rgb(53, 62, 72),
+            assistant_header: Color::Rgb(180, 196, 210),
+            tool_fg: Color::Rgb(230, 230, 190),
+            tool_bg: Color::Rgb(62, 63, 35),
+            tool_header: Color::Rgb(232, 236, 170),
+            system_fg: Color::Rgb(200, 200, 205),
+            system_bg: Color::Rgb(44, 44, 55),
+            system_header: Color::Gray,
+            image_badge_fg: Color::Rgb(45, 55, 45),
+            image_badge_bg: Color::Rgb(197, 224, 197),
+            code_fg: Color::Rgb(206, 217, 228),
+            code_bg: Color::Rgb(34, 40, 46),
+            inline_code_fg: Color::Rgb(223, 233, 242),
+            inline_code_bg: Color::Rgb(34, 40, 46),
+        },
+        UiTheme::NeonCircuit => ThemePalette {
+            status_fg: Color::Black,
+            status_bg: Color::Rgb(102, 224, 245),
+            border_active: Color::Rgb(69, 220, 214),
+            border_inactive: Color::Rgb(86, 95, 108),
+            sidebar_text: Color::Rgb(214, 238, 241),
+            chat_text: Color::Rgb(236, 250, 252),
+            body_muted: Color::Rgb(196, 222, 226),
+            footer_hint: Color::Rgb(133, 209, 214),
+            footer_context: Color::Rgb(120, 181, 186),
+            input_text: Color::Rgb(233, 251, 252),
+            input_border: Color::Rgb(63, 170, 178),
+            toast_fg: Color::White,
+            toast_info_bg: Color::Rgb(26, 82, 133),
+            toast_success_bg: Color::Rgb(25, 122, 93),
+            toast_error_bg: Color::Rgb(154, 51, 64),
+            help_fg: Color::Rgb(238, 251, 252),
+            help_bg: Color::Rgb(13, 20, 25),
+            help_border: Color::Rgb(88, 231, 224),
+            modal_fg: Color::Rgb(250, 240, 244),
+            modal_bg: Color::Rgb(31, 14, 20),
+            modal_border: Color::Rgb(255, 110, 143),
+            autocomplete_text: Color::Rgb(221, 248, 252),
+            autocomplete_border: Color::Rgb(88, 231, 224),
+            you_fg: Color::Black,
+            you_bg: Color::Rgb(130, 245, 217),
+            you_header: Color::Rgb(236, 255, 249),
+            assistant_fg: Color::Rgb(230, 243, 247),
+            assistant_bg: Color::Rgb(40, 56, 66),
+            assistant_header: Color::Rgb(150, 220, 231),
+            tool_fg: Color::Rgb(247, 231, 190),
+            tool_bg: Color::Rgb(72, 56, 26),
+            tool_header: Color::Rgb(255, 236, 159),
+            system_fg: Color::Rgb(225, 212, 234),
+            system_bg: Color::Rgb(55, 42, 67),
+            system_header: Color::Rgb(184, 161, 199),
+            image_badge_fg: Color::Rgb(22, 56, 52),
+            image_badge_bg: Color::Rgb(190, 245, 236),
+            code_fg: Color::Rgb(216, 232, 242),
+            code_bg: Color::Rgb(22, 31, 40),
+            inline_code_fg: Color::Rgb(225, 245, 255),
+            inline_code_bg: Color::Rgb(22, 31, 40),
+        },
+        UiTheme::SunsetEmber => ThemePalette {
+            status_fg: Color::Black,
+            status_bg: Color::Rgb(255, 181, 118),
+            border_active: Color::Rgb(236, 142, 73),
+            border_inactive: Color::Rgb(101, 91, 92),
+            sidebar_text: Color::Rgb(242, 224, 216),
+            chat_text: Color::Rgb(248, 233, 227),
+            body_muted: Color::Rgb(232, 210, 201),
+            footer_hint: Color::Rgb(214, 167, 150),
+            footer_context: Color::Rgb(188, 151, 138),
+            input_text: Color::Rgb(251, 238, 233),
+            input_border: Color::Rgb(190, 118, 84),
+            toast_fg: Color::White,
+            toast_info_bg: Color::Rgb(48, 88, 140),
+            toast_success_bg: Color::Rgb(36, 113, 77),
+            toast_error_bg: Color::Rgb(154, 57, 57),
+            help_fg: Color::Rgb(252, 237, 231),
+            help_bg: Color::Rgb(34, 23, 24),
+            help_border: Color::Rgb(255, 171, 120),
+            modal_fg: Color::Rgb(255, 235, 228),
+            modal_bg: Color::Rgb(42, 18, 18),
+            modal_border: Color::Rgb(252, 130, 108),
+            autocomplete_text: Color::Rgb(248, 226, 216),
+            autocomplete_border: Color::Rgb(255, 171, 120),
+            you_fg: Color::Black,
+            you_bg: Color::Rgb(255, 195, 133),
+            you_header: Color::Rgb(255, 244, 228),
+            assistant_fg: Color::Rgb(238, 226, 221),
+            assistant_bg: Color::Rgb(67, 53, 52),
+            assistant_header: Color::Rgb(222, 186, 171),
+            tool_fg: Color::Rgb(245, 229, 185),
+            tool_bg: Color::Rgb(86, 62, 31),
+            tool_header: Color::Rgb(255, 219, 147),
+            system_fg: Color::Rgb(230, 209, 227),
+            system_bg: Color::Rgb(67, 46, 68),
+            system_header: Color::Rgb(190, 158, 192),
+            image_badge_fg: Color::Rgb(64, 43, 31),
+            image_badge_bg: Color::Rgb(244, 208, 178),
+            code_fg: Color::Rgb(241, 223, 214),
+            code_bg: Color::Rgb(50, 37, 36),
+            inline_code_fg: Color::Rgb(255, 234, 224),
+            inline_code_bg: Color::Rgb(50, 37, 36),
+        },
+        UiTheme::OceanMidnight => ThemePalette {
+            status_fg: Color::Black,
+            status_bg: Color::Rgb(136, 200, 255),
+            border_active: Color::Rgb(101, 170, 242),
+            border_inactive: Color::Rgb(80, 91, 111),
+            sidebar_text: Color::Rgb(214, 225, 242),
+            chat_text: Color::Rgb(233, 239, 252),
+            body_muted: Color::Rgb(197, 210, 236),
+            footer_hint: Color::Rgb(142, 176, 226),
+            footer_context: Color::Rgb(124, 152, 201),
+            input_text: Color::Rgb(236, 244, 255),
+            input_border: Color::Rgb(88, 140, 226),
+            toast_fg: Color::White,
+            toast_info_bg: Color::Rgb(34, 83, 141),
+            toast_success_bg: Color::Rgb(31, 110, 88),
+            toast_error_bg: Color::Rgb(154, 53, 72),
+            help_fg: Color::Rgb(232, 239, 255),
+            help_bg: Color::Rgb(15, 23, 38),
+            help_border: Color::Rgb(116, 186, 255),
+            modal_fg: Color::Rgb(236, 236, 250),
+            modal_bg: Color::Rgb(21, 18, 37),
+            modal_border: Color::Rgb(188, 138, 255),
+            autocomplete_text: Color::Rgb(221, 236, 255),
+            autocomplete_border: Color::Rgb(116, 186, 255),
+            you_fg: Color::Black,
+            you_bg: Color::Rgb(156, 216, 255),
+            you_header: Color::Rgb(236, 248, 255),
+            assistant_fg: Color::Rgb(226, 234, 245),
+            assistant_bg: Color::Rgb(42, 55, 76),
+            assistant_header: Color::Rgb(167, 194, 232),
+            tool_fg: Color::Rgb(236, 226, 182),
+            tool_bg: Color::Rgb(70, 61, 30),
+            tool_header: Color::Rgb(248, 224, 146),
+            system_fg: Color::Rgb(222, 217, 236),
+            system_bg: Color::Rgb(58, 47, 73),
+            system_header: Color::Rgb(182, 170, 205),
+            image_badge_fg: Color::Rgb(30, 52, 78),
+            image_badge_bg: Color::Rgb(182, 216, 248),
+            code_fg: Color::Rgb(216, 231, 249),
+            code_bg: Color::Rgb(27, 40, 60),
+            inline_code_fg: Color::Rgb(226, 239, 255),
+            inline_code_bg: Color::Rgb(27, 40, 60),
+        },
+        UiTheme::MonoAmber => ThemePalette {
+            status_fg: Color::Black,
+            status_bg: Color::Rgb(238, 188, 113),
+            border_active: Color::Rgb(217, 163, 80),
+            border_inactive: Color::Rgb(100, 100, 100),
+            sidebar_text: Color::Rgb(225, 221, 214),
+            chat_text: Color::Rgb(238, 234, 226),
+            body_muted: Color::Rgb(205, 200, 190),
+            footer_hint: Color::Rgb(177, 167, 147),
+            footer_context: Color::Rgb(160, 150, 132),
+            input_text: Color::Rgb(242, 238, 230),
+            input_border: Color::Rgb(179, 144, 91),
+            toast_fg: Color::White,
+            toast_info_bg: Color::Rgb(56, 88, 126),
+            toast_success_bg: Color::Rgb(43, 111, 82),
+            toast_error_bg: Color::Rgb(148, 64, 64),
+            help_fg: Color::Rgb(236, 234, 228),
+            help_bg: Color::Rgb(26, 26, 26),
+            help_border: Color::Rgb(232, 184, 106),
+            modal_fg: Color::Rgb(244, 235, 220),
+            modal_bg: Color::Rgb(36, 25, 17),
+            modal_border: Color::Rgb(222, 137, 94),
+            autocomplete_text: Color::Rgb(231, 223, 212),
+            autocomplete_border: Color::Rgb(213, 171, 104),
+            you_fg: Color::Black,
+            you_bg: Color::Rgb(238, 200, 136),
+            you_header: Color::Rgb(252, 240, 216),
+            assistant_fg: Color::Rgb(227, 226, 221),
+            assistant_bg: Color::Rgb(56, 56, 56),
+            assistant_header: Color::Rgb(190, 187, 178),
+            tool_fg: Color::Rgb(248, 226, 178),
+            tool_bg: Color::Rgb(77, 58, 29),
+            tool_header: Color::Rgb(253, 214, 141),
+            system_fg: Color::Rgb(228, 214, 229),
+            system_bg: Color::Rgb(60, 50, 64),
+            system_header: Color::Rgb(188, 168, 192),
+            image_badge_fg: Color::Rgb(60, 47, 24),
+            image_badge_bg: Color::Rgb(233, 209, 163),
+            code_fg: Color::Rgb(226, 220, 209),
+            code_bg: Color::Rgb(40, 38, 33),
+            inline_code_fg: Color::Rgb(240, 232, 218),
+            inline_code_bg: Color::Rgb(40, 38, 33),
+        },
+        UiTheme::SakuraNight => ThemePalette {
+            status_fg: Color::Black,
+            status_bg: Color::Rgb(255, 171, 214),
+            border_active: Color::Rgb(227, 113, 185),
+            border_inactive: Color::Rgb(101, 90, 110),
+            sidebar_text: Color::Rgb(238, 221, 244),
+            chat_text: Color::Rgb(246, 234, 252),
+            body_muted: Color::Rgb(223, 204, 230),
+            footer_hint: Color::Rgb(194, 157, 208),
+            footer_context: Color::Rgb(174, 139, 191),
+            input_text: Color::Rgb(249, 238, 252),
+            input_border: Color::Rgb(183, 103, 168),
+            toast_fg: Color::White,
+            toast_info_bg: Color::Rgb(52, 87, 144),
+            toast_success_bg: Color::Rgb(35, 112, 84),
+            toast_error_bg: Color::Rgb(156, 53, 81),
+            help_fg: Color::Rgb(248, 236, 252),
+            help_bg: Color::Rgb(31, 20, 35),
+            help_border: Color::Rgb(255, 140, 214),
+            modal_fg: Color::Rgb(255, 236, 246),
+            modal_bg: Color::Rgb(42, 16, 27),
+            modal_border: Color::Rgb(255, 116, 171),
+            autocomplete_text: Color::Rgb(244, 225, 249),
+            autocomplete_border: Color::Rgb(233, 131, 203),
+            you_fg: Color::Black,
+            you_bg: Color::Rgb(255, 189, 224),
+            you_header: Color::Rgb(255, 242, 249),
+            assistant_fg: Color::Rgb(237, 228, 243),
+            assistant_bg: Color::Rgb(64, 50, 79),
+            assistant_header: Color::Rgb(209, 180, 226),
+            tool_fg: Color::Rgb(250, 229, 188),
+            tool_bg: Color::Rgb(84, 62, 31),
+            tool_header: Color::Rgb(255, 217, 142),
+            system_fg: Color::Rgb(228, 212, 238),
+            system_bg: Color::Rgb(66, 46, 78),
+            system_header: Color::Rgb(190, 166, 204),
+            image_badge_fg: Color::Rgb(70, 37, 58),
+            image_badge_bg: Color::Rgb(245, 204, 229),
+            code_fg: Color::Rgb(236, 223, 242),
+            code_bg: Color::Rgb(44, 34, 52),
+            inline_code_fg: Color::Rgb(247, 232, 255),
+            inline_code_bg: Color::Rgb(44, 34, 52),
+        },
+        UiTheme::PaperMint => ThemePalette {
+            status_fg: Color::White,
+            status_bg: Color::Rgb(0, 122, 204),
+            border_active: Color::Rgb(0, 122, 204),
+            border_inactive: Color::Rgb(188, 188, 188),
+            sidebar_text: Color::Rgb(51, 51, 51),
+            chat_text: Color::Rgb(30, 30, 30),
+            body_muted: Color::Rgb(71, 71, 71),
+            footer_hint: Color::Rgb(106, 115, 125),
+            footer_context: Color::Rgb(106, 115, 125),
+            input_text: Color::Rgb(30, 30, 30),
+            input_border: Color::Rgb(0, 122, 204),
+            toast_fg: Color::White,
+            toast_info_bg: Color::Rgb(45, 102, 164),
+            toast_success_bg: Color::Rgb(34, 134, 96),
+            toast_error_bg: Color::Rgb(173, 58, 58),
+            help_fg: Color::Rgb(30, 30, 30),
+            help_bg: Color::Rgb(255, 255, 255),
+            help_border: Color::Rgb(0, 122, 204),
+            modal_fg: Color::Rgb(30, 30, 30),
+            modal_bg: Color::Rgb(255, 255, 255),
+            modal_border: Color::Rgb(176, 37, 37),
+            autocomplete_text: Color::Rgb(30, 30, 30),
+            autocomplete_border: Color::Rgb(0, 122, 204),
+            you_fg: Color::Rgb(30, 30, 30),
+            you_bg: Color::Rgb(227, 242, 253),
+            you_header: Color::Rgb(0, 90, 158),
+            assistant_fg: Color::Rgb(30, 30, 30),
+            assistant_bg: Color::Rgb(245, 245, 245),
+            assistant_header: Color::Rgb(97, 97, 97),
+            tool_fg: Color::Rgb(73, 53, 23),
+            tool_bg: Color::Rgb(255, 244, 230),
+            tool_header: Color::Rgb(157, 104, 35),
+            system_fg: Color::Rgb(56, 50, 67),
+            system_bg: Color::Rgb(240, 236, 248),
+            system_header: Color::Rgb(111, 100, 133),
+            image_badge_fg: Color::Rgb(31, 71, 51),
+            image_badge_bg: Color::Rgb(217, 242, 228),
+            code_fg: Color::Rgb(51, 51, 51),
+            code_bg: Color::Rgb(246, 248, 250),
+            inline_code_fg: Color::Rgb(51, 51, 51),
+            inline_code_bg: Color::Rgb(240, 242, 245),
+        },
+        UiTheme::DaybreakCanvas => ThemePalette {
+            status_fg: Color::White,
+            status_bg: Color::Rgb(0, 99, 177),
+            border_active: Color::Rgb(58, 129, 196),
+            border_inactive: Color::Rgb(196, 196, 196),
+            sidebar_text: Color::Rgb(45, 45, 45),
+            chat_text: Color::Rgb(33, 33, 33),
+            body_muted: Color::Rgb(85, 85, 85),
+            footer_hint: Color::Rgb(110, 120, 130),
+            footer_context: Color::Rgb(120, 130, 140),
+            input_text: Color::Rgb(33, 33, 33),
+            input_border: Color::Rgb(58, 129, 196),
+            toast_fg: Color::White,
+            toast_info_bg: Color::Rgb(45, 102, 164),
+            toast_success_bg: Color::Rgb(34, 134, 96),
+            toast_error_bg: Color::Rgb(173, 58, 58),
+            help_fg: Color::Rgb(33, 33, 33),
+            help_bg: Color::Rgb(252, 252, 252),
+            help_border: Color::Rgb(58, 129, 196),
+            modal_fg: Color::Rgb(33, 33, 33),
+            modal_bg: Color::Rgb(255, 255, 255),
+            modal_border: Color::Rgb(184, 77, 77),
+            autocomplete_text: Color::Rgb(33, 33, 33),
+            autocomplete_border: Color::Rgb(58, 129, 196),
+            you_fg: Color::Rgb(33, 33, 33),
+            you_bg: Color::Rgb(235, 244, 255),
+            you_header: Color::Rgb(27, 85, 152),
+            assistant_fg: Color::Rgb(33, 33, 33),
+            assistant_bg: Color::Rgb(248, 248, 248),
+            assistant_header: Color::Rgb(92, 92, 92),
+            tool_fg: Color::Rgb(79, 58, 25),
+            tool_bg: Color::Rgb(255, 247, 236),
+            tool_header: Color::Rgb(150, 111, 39),
+            system_fg: Color::Rgb(63, 53, 76),
+            system_bg: Color::Rgb(244, 240, 250),
+            system_header: Color::Rgb(118, 103, 138),
+            image_badge_fg: Color::Rgb(30, 59, 84),
+            image_badge_bg: Color::Rgb(214, 235, 250),
+            code_fg: Color::Rgb(55, 55, 55),
+            code_bg: Color::Rgb(245, 247, 249),
+            inline_code_fg: Color::Rgb(55, 55, 55),
+            inline_code_bg: Color::Rgb(237, 241, 245),
+        },
+    }
+}
+
+fn app_background(theme: UiTheme) -> Color {
+    if theme.is_light() {
+        Color::Rgb(250, 250, 250)
+    } else {
+        Color::Rgb(17, 21, 27)
+    }
+}
+
+fn sidebar_background(theme: UiTheme) -> Color {
+    if theme.is_light() {
+        Color::Rgb(243, 243, 243)
+    } else {
+        Color::Rgb(22, 27, 34)
+    }
+}
+
+fn chat_background(theme: UiTheme) -> Color {
+    if theme.is_light() {
+        Color::Rgb(255, 255, 255)
+    } else {
+        Color::Rgb(17, 21, 27)
+    }
+}
+
+fn input_background(theme: UiTheme) -> Color {
+    if theme.is_light() {
+        Color::Rgb(255, 255, 255)
+    } else {
+        Color::Rgb(20, 25, 32)
+    }
+}
+
+fn autocomplete_background(theme: UiTheme) -> Color {
+    if theme.is_light() {
+        Color::Rgb(255, 255, 255)
+    } else {
+        Color::Rgb(18, 24, 33)
+    }
+}
+
 pub fn draw(frame: &mut Frame<'_>, app: &App) {
     if frame.area().width < 2 || frame.area().height < 2 {
         return;
     }
+    let palette = theme_palette(app.theme);
+    frame.render_widget(
+        Block::default().style(Style::default().bg(app_background(app.theme))),
+        frame.area(),
+    );
 
     let root = Layout::default()
         .direction(Direction::Vertical)
@@ -55,7 +494,7 @@ pub fn draw(frame: &mut Frame<'_>, app: &App) {
         ])
         .split(frame.area());
 
-    render_status_bar(frame, app, root[0]);
+    render_status_bar(frame, app, root[0], palette);
 
     let body = if frame.area().width < 115 {
         Layout::default()
@@ -69,9 +508,9 @@ pub fn draw(frame: &mut Frame<'_>, app: &App) {
             .split(root[1])
     };
 
-    render_models_panel(frame, app, body[0]);
-    render_chat_panel(frame, app, body[1]);
-    render_input_panel(frame, app, root[2]);
+    render_models_panel(frame, app, body[0], palette);
+    render_chat_panel(frame, app, body[1], palette);
+    render_input_panel(frame, app, root[2], palette);
 
     if let Some(toast) = &app.toast {
         let frame_width = frame.area().width;
@@ -90,17 +529,22 @@ pub fn draw(frame: &mut Frame<'_>, app: &App) {
         frame.render_widget(Clear, area);
         let style = match toast.level {
             ToastLevel::Info => Style::default()
-                .bg(Color::Rgb(20, 63, 114))
-                .fg(Color::White),
-            ToastLevel::Success => Style::default().bg(Color::Rgb(13, 97, 65)).fg(Color::White),
+                .bg(palette.toast_info_bg)
+                .fg(palette.toast_fg),
+            ToastLevel::Success => Style::default()
+                .bg(palette.toast_success_bg)
+                .fg(palette.toast_fg),
             ToastLevel::Error => Style::default()
-                .bg(Color::Rgb(120, 33, 33))
-                .fg(Color::White),
+                .bg(palette.toast_error_bg)
+                .fg(palette.toast_fg),
         };
         frame.render_widget(
-            Paragraph::new(toast.message.as_str())
-                .style(style)
-                .block(Block::default().borders(Borders::ALL).title("Toast")),
+            Paragraph::new(toast.message.as_str()).style(style).block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title("Toast")
+                    .style(Style::default().fg(palette.border_active)),
+            ),
             area,
         );
     }
@@ -110,12 +554,12 @@ pub fn draw(frame: &mut Frame<'_>, app: &App) {
         frame.render_widget(Clear, area);
         frame.render_widget(
             Paragraph::new(help_text())
-                .style(Style::default().fg(Color::White).bg(Color::Rgb(16, 21, 28)))
+                .style(Style::default().fg(palette.help_fg).bg(palette.help_bg))
                 .block(
                     Block::default()
                         .title("Help")
                         .borders(Borders::ALL)
-                        .style(Style::default().fg(Color::Rgb(96, 212, 165))),
+                        .style(Style::default().fg(palette.help_border)),
                 )
                 .wrap(Wrap { trim: false }),
             area,
@@ -131,21 +575,23 @@ pub fn draw(frame: &mut Frame<'_>, app: &App) {
         );
         frame.render_widget(
             Paragraph::new(body)
-                .style(Style::default().fg(Color::White).bg(Color::Rgb(22, 18, 18)))
+                .style(Style::default().fg(palette.modal_fg).bg(palette.modal_bg))
                 .block(
                     Block::default()
                         .title("Confirm Delete")
                         .borders(Borders::ALL)
-                        .style(Style::default().fg(Color::Rgb(235, 114, 114))),
+                        .style(Style::default().fg(palette.modal_border)),
                 )
                 .alignment(Alignment::Center)
                 .wrap(Wrap { trim: true }),
             area,
         );
     }
+
+    render_theme_picker_modal(frame, app, palette);
 }
 
-fn render_status_bar(frame: &mut Frame<'_>, app: &App, area: Rect) {
+fn render_status_bar(frame: &mut Frame<'_>, app: &App, area: Rect, palette: ThemePalette) {
     let connection = match app.connection_status {
         ConnectionStatus::Unknown => "Unknown",
         ConnectionStatus::Online => "Online",
@@ -180,15 +626,15 @@ fn render_status_bar(frame: &mut Frame<'_>, app: &App, area: Rect) {
     frame.render_widget(
         Paragraph::new(status).style(
             Style::default()
-                .fg(Color::Black)
-                .bg(Color::Rgb(100, 230, 173))
+                .fg(palette.status_fg)
+                .bg(palette.status_bg)
                 .add_modifier(Modifier::BOLD),
         ),
         area,
     );
 }
 
-fn render_models_panel(frame: &mut Frame<'_>, app: &App, area: Rect) {
+fn render_models_panel(frame: &mut Frame<'_>, app: &App, area: Rect, palette: ThemePalette) {
     if area.width < 2 || area.height < 2 {
         return;
     }
@@ -307,14 +753,22 @@ fn render_models_panel(frame: &mut Frame<'_>, app: &App, area: Rect) {
     }
 
     let border_style = if app.focus == FocusPane::Workspaces {
-        Style::default().fg(Color::Rgb(70, 190, 140))
+        Style::default()
+            .fg(palette.border_active)
+            .bg(sidebar_background(app.theme))
     } else {
-        Style::default().fg(Color::DarkGray)
+        Style::default()
+            .fg(palette.border_inactive)
+            .bg(sidebar_background(app.theme))
     };
 
     frame.render_widget(
         Paragraph::new(lines.join("\n"))
-            .style(Style::default().fg(Color::Rgb(210, 220, 224)))
+            .style(
+                Style::default()
+                    .fg(palette.sidebar_text)
+                    .bg(sidebar_background(app.theme)),
+            )
             .block(
                 Block::default()
                     .title("Sidebar")
@@ -325,17 +779,21 @@ fn render_models_panel(frame: &mut Frame<'_>, app: &App, area: Rect) {
     );
 }
 
-fn render_chat_panel(frame: &mut Frame<'_>, app: &App, area: Rect) {
+fn render_chat_panel(frame: &mut Frame<'_>, app: &App, area: Rect, palette: ThemePalette) {
     if area.width < 2 || area.height < 2 {
         return;
     }
 
     let border_style = if app.focus == FocusPane::Chat {
-        Style::default().fg(Color::Rgb(70, 190, 140))
+        Style::default()
+            .fg(palette.border_active)
+            .bg(chat_background(app.theme))
     } else {
-        Style::default().fg(Color::DarkGray)
+        Style::default()
+            .fg(palette.border_inactive)
+            .bg(chat_background(app.theme))
     };
-    let text = render_chat_text(app);
+    let text = render_chat_text(app, palette);
     let line_count = text.lines.len() as u16;
     let block = Block::default()
         .title("Chat")
@@ -365,7 +823,7 @@ fn render_chat_panel(frame: &mut Frame<'_>, app: &App, area: Rect) {
         .join("\n");
         frame.render_widget(
             Paragraph::new(welcome)
-                .style(Style::default().fg(Color::Rgb(205, 220, 228)))
+                .style(Style::default().fg(palette.body_muted))
                 .alignment(Alignment::Center)
                 .wrap(Wrap { trim: true }),
             inner,
@@ -385,7 +843,7 @@ fn render_chat_panel(frame: &mut Frame<'_>, app: &App, area: Rect) {
         .join("\n");
         frame.render_widget(
             Paragraph::new(empty_session)
-                .style(Style::default().fg(Color::Rgb(205, 220, 228)))
+                .style(Style::default().fg(palette.body_muted))
                 .alignment(Alignment::Center)
                 .wrap(Wrap { trim: true }),
             inner,
@@ -403,7 +861,11 @@ fn render_chat_panel(frame: &mut Frame<'_>, app: &App, area: Rect) {
     let scroll_y = app.chat_scroll.min(max_scroll);
     frame.render_widget(
         Paragraph::new(text)
-            .style(Style::default().fg(Color::White))
+            .style(
+                Style::default()
+                    .fg(palette.chat_text)
+                    .bg(chat_background(app.theme)),
+            )
             .scroll((scroll_y, 0))
             .wrap(Wrap { trim: false }),
         split[0],
@@ -420,7 +882,11 @@ fn render_chat_panel(frame: &mut Frame<'_>, app: &App, area: Rect) {
             &action_hint,
             footer[0].width.saturating_sub(1) as usize,
         ))
-        .style(Style::default().fg(Color::Rgb(148, 176, 188)))
+        .style(
+            Style::default()
+                .fg(palette.footer_hint)
+                .bg(chat_background(app.theme)),
+        )
         .alignment(Alignment::Left),
         footer[0],
     );
@@ -442,32 +908,49 @@ fn render_chat_panel(frame: &mut Frame<'_>, app: &App, area: Rect) {
             &context_line,
             footer[1].width.saturating_sub(1) as usize,
         ))
-        .style(Style::default().fg(Color::Rgb(130, 150, 160)))
+        .style(
+            Style::default()
+                .fg(palette.footer_context)
+                .bg(chat_background(app.theme)),
+        )
         .alignment(Alignment::Right),
         footer[1],
     );
 }
 
-fn render_input_panel(frame: &mut Frame<'_>, app: &App, area: Rect) {
+fn render_input_panel(frame: &mut Frame<'_>, app: &App, area: Rect, palette: ThemePalette) {
     if area.width < 2 || area.height < 2 {
         return;
     }
 
     frame.render_widget(
         Paragraph::new(app.input.as_str())
-            .style(Style::default().fg(Color::Rgb(230, 240, 240)))
+            .style(
+                Style::default()
+                    .fg(palette.input_text)
+                    .bg(input_background(app.theme)),
+            )
             .block(
                 Block::default()
                     .title("Input (Ctrl+Enter send, Tab autocomplete)")
                     .borders(Borders::ALL)
-                    .style(Style::default().fg(Color::Rgb(60, 130, 110))),
+                    .style(
+                        Style::default()
+                            .fg(palette.input_border)
+                            .bg(input_background(app.theme)),
+                    ),
             ),
         area,
     );
-    render_autocomplete_popup(frame, app, area);
+    render_autocomplete_popup(frame, app, area, palette);
 }
 
-fn render_autocomplete_popup(frame: &mut Frame<'_>, app: &App, input_area: Rect) {
+fn render_autocomplete_popup(
+    frame: &mut Frame<'_>,
+    app: &App,
+    input_area: Rect,
+    palette: ThemePalette,
+) {
     if app.focus != FocusPane::Chat && !app.input.trim_start().starts_with('/') {
         return;
     }
@@ -513,18 +996,26 @@ fn render_autocomplete_popup(frame: &mut Frame<'_>, app: &App, input_area: Rect)
     frame.render_widget(Clear, popup_area);
     frame.render_widget(
         Paragraph::new(lines)
-            .style(Style::default().fg(Color::Rgb(205, 224, 239)))
+            .style(
+                Style::default()
+                    .fg(palette.autocomplete_text)
+                    .bg(autocomplete_background(app.theme)),
+            )
             .block(
                 Block::default()
                     .title("Autocomplete (Tab)")
                     .borders(Borders::ALL)
-                    .style(Style::default().fg(Color::Rgb(100, 175, 220))),
+                    .style(
+                        Style::default()
+                            .fg(palette.autocomplete_border)
+                            .bg(autocomplete_background(app.theme)),
+                    ),
             ),
         popup_area,
     );
 }
 
-fn render_chat_text(app: &App) -> Text<'static> {
+fn render_chat_text(app: &App, palette: ThemePalette) -> Text<'static> {
     let mut lines: Vec<Line<'static>> = Vec::new();
 
     for message in &app.messages {
@@ -532,41 +1023,35 @@ fn render_chat_text(app: &App) -> Text<'static> {
             "You" => (
                 "YOU",
                 Alignment::Right,
+                Style::default().fg(palette.you_fg).bg(palette.you_bg),
                 Style::default()
-                    .fg(Color::Black)
-                    .bg(Color::Rgb(112, 230, 174)),
-                Style::default()
-                    .fg(Color::Rgb(220, 255, 240))
+                    .fg(palette.you_header)
                     .add_modifier(Modifier::BOLD),
             ),
             "Assistant" => (
                 "AI",
                 Alignment::Left,
                 Style::default()
-                    .fg(Color::Rgb(225, 232, 238))
-                    .bg(Color::Rgb(53, 62, 72)),
+                    .fg(palette.assistant_fg)
+                    .bg(palette.assistant_bg),
                 Style::default()
-                    .fg(Color::Rgb(180, 196, 210))
+                    .fg(palette.assistant_header)
                     .add_modifier(Modifier::BOLD),
             ),
             "Tool" => (
                 "TOOL",
                 Alignment::Left,
+                Style::default().fg(palette.tool_fg).bg(palette.tool_bg),
                 Style::default()
-                    .fg(Color::Rgb(230, 230, 190))
-                    .bg(Color::Rgb(62, 63, 35)),
-                Style::default()
-                    .fg(Color::Rgb(232, 236, 170))
+                    .fg(palette.tool_header)
                     .add_modifier(Modifier::BOLD),
             ),
             _ => (
                 "SYS",
                 Alignment::Center,
+                Style::default().fg(palette.system_fg).bg(palette.system_bg),
                 Style::default()
-                    .fg(Color::Rgb(200, 200, 205))
-                    .bg(Color::Rgb(44, 44, 55)),
-                Style::default()
-                    .fg(Color::Gray)
+                    .fg(palette.system_header)
                     .add_modifier(Modifier::ITALIC),
             ),
         };
@@ -587,15 +1072,20 @@ fn render_chat_text(app: &App) -> Text<'static> {
                 Line::from(vec![Span::styled(
                     format!(" [attached images: {}] ", message.image_count),
                     base_style
-                        .fg(Color::Rgb(45, 55, 45))
-                        .bg(Color::Rgb(197, 224, 197))
+                        .fg(palette.image_badge_fg)
+                        .bg(palette.image_badge_bg)
                         .add_modifier(Modifier::BOLD),
                 )])
                 .alignment(align),
             );
         }
 
-        let message_lines = markdown_lines(&message.content, base_style, app.syntax_highlighting);
+        let message_lines = markdown_lines(
+            &message.content,
+            base_style,
+            app.syntax_highlighting,
+            palette,
+        );
         for spans in message_lines {
             lines.push(Line::from(spans).alignment(align));
         }
@@ -609,6 +1099,7 @@ fn markdown_lines(
     content: &str,
     base_style: Style,
     enable_highlighting: bool,
+    palette: ThemePalette,
 ) -> Vec<Vec<Span<'static>>> {
     let mut out = Vec::new();
     let mut in_code_block = false;
@@ -647,6 +1138,7 @@ fn markdown_lines(
                 syntax_set_ref,
                 base_style,
                 enable_highlighting,
+                palette,
             ));
             continue;
         }
@@ -660,7 +1152,7 @@ fn markdown_lines(
             leading.to_string()
         };
 
-        let spans = inline_markdown_spans(&normalized, base_style);
+        let spans = inline_markdown_spans(&normalized, base_style, palette);
         out.push(pad_line(spans, base_style));
     }
 
@@ -686,19 +1178,20 @@ fn render_code_line(
     syntax_set_ref: Option<&'static SyntaxSet>,
     base_style: Style,
     enable_highlighting: bool,
+    palette: ThemePalette,
 ) -> Vec<Span<'static>> {
     let fallback = || {
         pad_line(
             vec![Span::styled(
                 line.to_string(),
                 base_style
-                    .fg(Color::Rgb(206, 217, 228))
-                    .bg(Color::Rgb(34, 40, 46))
+                    .fg(palette.code_fg)
+                    .bg(palette.code_bg)
                     .add_modifier(Modifier::DIM),
             )],
             base_style
-                .fg(Color::Rgb(206, 217, 228))
-                .bg(Color::Rgb(34, 40, 46))
+                .fg(palette.code_fg)
+                .bg(palette.code_bg)
                 .add_modifier(Modifier::DIM),
         )
     };
@@ -745,7 +1238,11 @@ fn syntect_style(style: SyntectStyle) -> Style {
         ))
 }
 
-fn inline_markdown_spans(line: &str, base_style: Style) -> Vec<Span<'static>> {
+fn inline_markdown_spans(
+    line: &str,
+    base_style: Style,
+    palette: ThemePalette,
+) -> Vec<Span<'static>> {
     let mut spans = Vec::new();
     let mut buffer = String::new();
     let mut bold = false;
@@ -756,7 +1253,15 @@ fn inline_markdown_spans(line: &str, base_style: Style) -> Vec<Span<'static>> {
 
     while i < chars.len() {
         if chars[i] == '`' {
-            flush_segment(&mut spans, &mut buffer, base_style, bold, italic, code);
+            flush_segment(
+                &mut spans,
+                &mut buffer,
+                base_style,
+                bold,
+                italic,
+                code,
+                palette,
+            );
             code = !code;
             i += 1;
             continue;
@@ -764,12 +1269,28 @@ fn inline_markdown_spans(line: &str, base_style: Style) -> Vec<Span<'static>> {
 
         if !code && chars[i] == '*' {
             if i + 1 < chars.len() && chars[i + 1] == '*' {
-                flush_segment(&mut spans, &mut buffer, base_style, bold, italic, code);
+                flush_segment(
+                    &mut spans,
+                    &mut buffer,
+                    base_style,
+                    bold,
+                    italic,
+                    code,
+                    palette,
+                );
                 bold = !bold;
                 i += 2;
                 continue;
             }
-            flush_segment(&mut spans, &mut buffer, base_style, bold, italic, code);
+            flush_segment(
+                &mut spans,
+                &mut buffer,
+                base_style,
+                bold,
+                italic,
+                code,
+                palette,
+            );
             italic = !italic;
             i += 1;
             continue;
@@ -779,7 +1300,15 @@ fn inline_markdown_spans(line: &str, base_style: Style) -> Vec<Span<'static>> {
         i += 1;
     }
 
-    flush_segment(&mut spans, &mut buffer, base_style, bold, italic, code);
+    flush_segment(
+        &mut spans,
+        &mut buffer,
+        base_style,
+        bold,
+        italic,
+        code,
+        palette,
+    );
     spans
 }
 
@@ -790,6 +1319,7 @@ fn flush_segment(
     bold: bool,
     italic: bool,
     code: bool,
+    palette: ThemePalette,
 ) {
     if buffer.is_empty() {
         return;
@@ -804,8 +1334,8 @@ fn flush_segment(
     }
     if code {
         style = style
-            .fg(Color::Rgb(223, 233, 242))
-            .bg(Color::Rgb(34, 40, 46))
+            .fg(palette.inline_code_fg)
+            .bg(palette.inline_code_bg)
             .add_modifier(Modifier::DIM);
     }
 
@@ -850,10 +1380,10 @@ fn truncate_end(value: &str, max_chars: usize) -> String {
     if chars.len() <= max_chars {
         return value.to_string();
     }
-    if max_chars <= 1 {
-        return String::from("…");
+    if max_chars <= 3 {
+        return ".".repeat(max_chars);
     }
-    chars.into_iter().take(max_chars - 1).collect::<String>() + "…"
+    chars.into_iter().take(max_chars - 3).collect::<String>() + "..."
 }
 
 fn sidebar_line_with_marquee(
@@ -887,9 +1417,9 @@ fn sidebar_line_with_marquee(
     if !is_selected {
         let tail = dynamic_chars
             .iter()
-            .take(dynamic_width.saturating_sub(1))
+            .take(dynamic_width.saturating_sub(3))
             .collect::<String>();
-        return format!("{prefix}{tail}…");
+        return format!("{prefix}{tail}...");
     }
 
     let separator = "   ";
@@ -913,11 +1443,50 @@ fn scroll_window(chars: &[char], width: usize, offset: usize) -> String {
         .collect::<String>()
 }
 
+fn render_theme_picker_modal(frame: &mut Frame<'_>, app: &App, palette: ThemePalette) {
+    let Some(state) = app.theme_picker else {
+        return;
+    };
+
+    let area = centered_rect(62, 72, frame.area());
+    frame.render_widget(Clear, area);
+
+    let lines = app
+        .theme_picker_entries()
+        .iter()
+        .enumerate()
+        .map(|(index, theme)| {
+            let cursor = if index == state.selected { ">" } else { " " };
+            let active = if *theme == app.theme { "*" } else { " " };
+            let mode = if theme.is_light() { "light" } else { "dark" };
+            format!("{cursor} {active} {} ({mode})", theme.label())
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    let body = format!(
+        "Theme Picker (live preview)\n\n{}\n\nUp/Down preview  |  Enter keep  |  Esc cancel",
+        lines
+    );
+
+    frame.render_widget(
+        Paragraph::new(body)
+            .style(Style::default().fg(palette.help_fg).bg(palette.help_bg))
+            .block(
+                Block::default()
+                    .title("Themes (/themes)")
+                    .borders(Borders::ALL)
+                    .style(Style::default().fg(palette.help_border)),
+            )
+            .wrap(Wrap { trim: true }),
+        area,
+    );
+}
+
 fn sidebar_action_hint(app: &App) -> String {
     match app.sidebar_item() {
-        Some(SidebarItem::SectionHeader(SidebarSection::Models)) => {
-            String::from("Enter toggle all models | /models refresh | /models add <name-or-url>")
-        }
+        Some(SidebarItem::SectionHeader(SidebarSection::Models)) => String::from(
+            "Enter toggle all models | /models refresh | /models add <name-or-url> | /themes",
+        ),
         Some(SidebarItem::ModelGroupHeader(ModelBucket::Cloud)) => {
             String::from("Enter collapse/expand cloud models")
         }
@@ -956,7 +1525,7 @@ PgUp/PgDn   Fast scroll\n\
 Enter       Select sidebar item (headers collapse/expand)\n\
 \n\
 Slash commands:\n\
-/commands, /models, /search, /export, /workspace, /session, /checkpoint\n\
+/commands, /models, /themes, /search, /export, /workspace, /session, /checkpoint\n\
 /attach, /clear-attachments, /model, /url"
 }
 
