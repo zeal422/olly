@@ -17,6 +17,7 @@ use crossterm::{
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use ratatui::{backend::CrosstermBackend, Terminal};
+use serde::{Deserialize, Serialize};
 
 use crate::{
     config::AppConfig,
@@ -106,6 +107,17 @@ pub struct Message {
     pub tool_calls_preview: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
+#[serde(default)]
+struct UiRuntimeState {
+    models_collapsed: bool,
+    cloud_models_collapsed: bool,
+    local_models_collapsed: bool,
+    workspaces_collapsed: bool,
+    collapsed_workspace_ids: Vec<i64>,
+    sidebar_index: usize,
+}
+
 #[derive(Debug, Clone)]
 pub struct App {
     pub input: String,
@@ -182,6 +194,32 @@ impl App {
 
     pub fn should_quit(&self) -> bool {
         self.should_quit
+    }
+
+    fn snapshot_ui_state(&self) -> UiRuntimeState {
+        let mut collapsed_workspace_ids = self
+            .collapsed_workspace_ids
+            .iter()
+            .copied()
+            .collect::<Vec<_>>();
+        collapsed_workspace_ids.sort_unstable();
+        UiRuntimeState {
+            models_collapsed: self.models_collapsed,
+            cloud_models_collapsed: self.cloud_models_collapsed,
+            local_models_collapsed: self.local_models_collapsed,
+            workspaces_collapsed: self.workspaces_collapsed,
+            collapsed_workspace_ids,
+            sidebar_index: self.sidebar_index,
+        }
+    }
+
+    fn apply_ui_state(&mut self, state: UiRuntimeState) {
+        self.models_collapsed = state.models_collapsed;
+        self.cloud_models_collapsed = state.cloud_models_collapsed;
+        self.local_models_collapsed = state.local_models_collapsed;
+        self.workspaces_collapsed = state.workspaces_collapsed;
+        self.collapsed_workspace_ids = state.collapsed_workspace_ids.into_iter().collect();
+        self.sidebar_index = state.sidebar_index;
     }
 
     pub fn tick(&mut self) {
@@ -1297,16 +1335,41 @@ fn filesystem_directory_suggestions(partial: &str) -> Vec<String> {
     suggestions
 }
 
+fn ui_state_path_for_config(config: &AppConfig) -> PathBuf {
+    Path::new(&config.storage.db_path)
+        .parent()
+        .map(|dir| dir.join("ui_state.json"))
+        .unwrap_or_else(|| crate::config::default_data_dir().join("ui_state.json"))
+}
+
+fn load_ui_state_from_path(path: &Path) -> Option<UiRuntimeState> {
+    let raw = fs::read_to_string(path).ok()?;
+    serde_json::from_str::<UiRuntimeState>(&raw).ok()
+}
+
+fn save_ui_state_to_path(path: &Path, state: &UiRuntimeState) -> io::Result<()> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    let raw = serde_json::to_string_pretty(state)
+        .map_err(|err| io::Error::other(format!("serialize ui state: {err}")))?;
+    fs::write(path, raw)
+}
+
 pub async fn run(
     url_override: Option<String>,
     model_override: Option<String>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let config = AppConfig::load_or_create()?;
+    let ui_state_path = ui_state_path_for_config(&config);
     let url = url_override.unwrap_or_else(|| config.ollama.url.clone());
     let model = model_override.unwrap_or_else(|| config.defaults.model.clone());
     let mut app = App::new(url, model);
     app.workspace_name = config.defaults.workspace.clone();
     app.syntax_highlighting = config.ui.syntax_highlighting;
+    if let Some(saved_ui_state) = load_ui_state_from_path(&ui_state_path) {
+        app.apply_ui_state(saved_ui_state);
+    }
     let input_bindings = input::InputBindings::from_config(&config.keybindings);
 
     let manager = WorkspaceManager::open(Path::new(&config.storage.db_path))?;
@@ -1360,10 +1423,17 @@ pub async fn run(
     execute!(stdout, EnterAlternateScreen)?;
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
+    let mut last_saved_ui_state = app.snapshot_ui_state();
+    let _ = save_ui_state_to_path(&ui_state_path, &last_saved_ui_state);
 
     let run_result = async {
         while !app.should_quit() {
             app.tick();
+            let current_ui_state = app.snapshot_ui_state();
+            if current_ui_state != last_saved_ui_state {
+                let _ = save_ui_state_to_path(&ui_state_path, &current_ui_state);
+                last_saved_ui_state = current_ui_state;
+            }
             terminal.draw(|f| tui::draw(f, &app))?;
             if event::poll(Duration::from_millis(50))? {
                 if let Event::Key(key) = event::read()? {
@@ -1682,9 +1752,11 @@ pub async fn run(
     }
     .await;
 
+    let ui_state = app.snapshot_ui_state();
     disable_raw_mode()?;
     execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
     terminal.show_cursor()?;
+    let _ = save_ui_state_to_path(&ui_state_path, &ui_state);
 
     run_result
 }
@@ -2914,8 +2986,13 @@ fn tool_calls_preview(tool_calls: &[ChatToolCall]) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::{
-        autocomplete_suggestions, is_cloud_model_name, next_autocomplete_value, App, ModelBucket,
-        SessionEntry, SidebarItem, WorkspaceEntry,
+        autocomplete_suggestions, is_cloud_model_name, load_ui_state_from_path,
+        next_autocomplete_value, save_ui_state_to_path, App, ModelBucket, SessionEntry,
+        SidebarItem, UiRuntimeState, WorkspaceEntry,
+    };
+    use std::{
+        fs,
+        time::{SystemTime, UNIX_EPOCH},
     };
 
     fn sample_workspaces() -> Vec<WorkspaceEntry> {
@@ -2973,6 +3050,71 @@ mod tests {
         let entries = app.sidebar_entries();
         assert!(entries.contains(&SidebarItem::ModelGroupHeader(ModelBucket::Cloud)));
         assert!(entries.contains(&SidebarItem::ModelGroupHeader(ModelBucket::Local)));
+    }
+
+    #[test]
+    fn ui_runtime_state_roundtrips_for_sidebar_preferences() {
+        let mut app = App::new(
+            String::from("http://localhost:11434"),
+            String::from("llama3.2:latest"),
+        );
+        app.models_collapsed = true;
+        app.cloud_models_collapsed = true;
+        app.local_models_collapsed = false;
+        app.workspaces_collapsed = true;
+        app.collapsed_workspace_ids = [4_i64, 2_i64].into_iter().collect();
+        app.sidebar_index = 7;
+
+        let state = app.snapshot_ui_state();
+        assert_eq!(
+            state,
+            UiRuntimeState {
+                models_collapsed: true,
+                cloud_models_collapsed: true,
+                local_models_collapsed: false,
+                workspaces_collapsed: true,
+                collapsed_workspace_ids: vec![2, 4],
+                sidebar_index: 7,
+            }
+        );
+
+        let mut next = App::new(
+            String::from("http://localhost:11434"),
+            String::from("llama3.2:latest"),
+        );
+        next.apply_ui_state(state);
+        assert!(next.models_collapsed);
+        assert!(next.cloud_models_collapsed);
+        assert!(!next.local_models_collapsed);
+        assert!(next.workspaces_collapsed);
+        assert!(next.collapsed_workspace_ids.contains(&2));
+        assert!(next.collapsed_workspace_ids.contains(&4));
+        assert_eq!(next.sidebar_index, 7);
+    }
+
+    #[test]
+    fn ui_state_file_save_and_load_roundtrip() {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock")
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!("olly-ui-state-{unique}"));
+        let path = root.join("ui_state.json");
+        let state = UiRuntimeState {
+            models_collapsed: true,
+            cloud_models_collapsed: false,
+            local_models_collapsed: true,
+            workspaces_collapsed: false,
+            collapsed_workspace_ids: vec![10, 3],
+            sidebar_index: 5,
+        };
+
+        save_ui_state_to_path(&path, &state).expect("save ui state");
+        let loaded = load_ui_state_from_path(&path).expect("load ui state");
+        assert_eq!(loaded, state);
+
+        let _ = fs::remove_file(&path);
+        let _ = fs::remove_dir_all(&root);
     }
 
     #[test]
