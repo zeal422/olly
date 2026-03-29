@@ -15,6 +15,7 @@ The format is based on Keep a Changelog, and this project follows Semantic Versi
 - Filesystem-aware path suggestions for workspace commands that use `--path`.
 - Sidebar nesting of sessions under their respective workspace, with per-workspace session collapse/expand behavior.
 - Sidebar model grouping under `Cloud` and `Local` subcategories with independent collapse/expand behavior.
+- Theme system with 8 built-in color palettes (including 2 light themes), plus `/themes` modal with live preview while navigating options.
 - Persistent UI state storage for sidebar preferences across restarts (models/workspaces/group collapse + collapsed workspace list + sidebar selection index).
 - Chat footer context strip (inside chat panel) showing active session/workspace context without overlapping message content.
 - Delete confirmation modal UX for workspaces (Enter confirm, Esc cancel).

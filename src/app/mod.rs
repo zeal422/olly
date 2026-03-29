@@ -32,6 +32,7 @@ use crate::{
 const COMMAND_SUGGESTIONS: &[&str] = &[
     "/commands",
     "/models",
+    "/themes",
     "/session",
     "/search",
     "/export",
@@ -43,6 +44,50 @@ const COMMAND_SUGGESTIONS: &[&str] = &[
     "/url",
 ];
 const AUTO_SCROLL_TARGET: u16 = 30_000;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "kebab-case")]
+pub enum UiTheme {
+    #[default]
+    EmeraldDusk,
+    NeonCircuit,
+    SunsetEmber,
+    OceanMidnight,
+    MonoAmber,
+    SakuraNight,
+    PaperMint,
+    DaybreakCanvas,
+}
+
+impl UiTheme {
+    pub const ALL: [UiTheme; 8] = [
+        UiTheme::EmeraldDusk,
+        UiTheme::NeonCircuit,
+        UiTheme::SunsetEmber,
+        UiTheme::OceanMidnight,
+        UiTheme::MonoAmber,
+        UiTheme::SakuraNight,
+        UiTheme::PaperMint,
+        UiTheme::DaybreakCanvas,
+    ];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            UiTheme::EmeraldDusk => "Emerald Dusk",
+            UiTheme::NeonCircuit => "Neon Circuit",
+            UiTheme::SunsetEmber => "Sunset Ember",
+            UiTheme::OceanMidnight => "Ocean Midnight",
+            UiTheme::MonoAmber => "Mono Amber",
+            UiTheme::SakuraNight => "Sakura Night",
+            UiTheme::PaperMint => "Paper Mint",
+            UiTheme::DaybreakCanvas => "Daybreak Canvas",
+        }
+    }
+
+    pub fn is_light(self) -> bool {
+        matches!(self, UiTheme::PaperMint | UiTheme::DaybreakCanvas)
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ConnectionStatus {
@@ -110,12 +155,19 @@ pub struct Message {
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
 #[serde(default)]
 struct UiRuntimeState {
+    theme: UiTheme,
     models_collapsed: bool,
     cloud_models_collapsed: bool,
     local_models_collapsed: bool,
     workspaces_collapsed: bool,
     collapsed_workspace_ids: Vec<i64>,
     sidebar_index: usize,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ThemePickerState {
+    pub selected: usize,
+    pub original: UiTheme,
 }
 
 #[derive(Debug, Clone)]
@@ -149,6 +201,8 @@ pub struct App {
     pub syntax_highlighting: bool,
     pub pending_images: Vec<PendingImage>,
     pub pending_workspace_delete: Option<PendingWorkspaceDelete>,
+    pub theme: UiTheme,
+    pub theme_picker: Option<ThemePickerState>,
     pub command_suggestion_index: usize,
     pub quit_armed_until: Option<Instant>,
     should_quit: bool,
@@ -186,6 +240,8 @@ impl App {
             syntax_highlighting: true,
             pending_images: Vec::new(),
             pending_workspace_delete: None,
+            theme: UiTheme::default(),
+            theme_picker: None,
             command_suggestion_index: 0,
             quit_armed_until: None,
             should_quit: false,
@@ -204,6 +260,7 @@ impl App {
             .collect::<Vec<_>>();
         collapsed_workspace_ids.sort_unstable();
         UiRuntimeState {
+            theme: self.theme,
             models_collapsed: self.models_collapsed,
             cloud_models_collapsed: self.cloud_models_collapsed,
             local_models_collapsed: self.local_models_collapsed,
@@ -214,6 +271,7 @@ impl App {
     }
 
     fn apply_ui_state(&mut self, state: UiRuntimeState) {
+        self.theme = state.theme;
         self.models_collapsed = state.models_collapsed;
         self.cloud_models_collapsed = state.cloud_models_collapsed;
         self.local_models_collapsed = state.local_models_collapsed;
@@ -323,6 +381,56 @@ impl App {
             FocusPane::Chat => "Chat",
         };
         self.set_toast(ToastLevel::Info, format!("Focus: {pane}"));
+    }
+
+    pub fn theme_picker_entries(&self) -> &'static [UiTheme] {
+        &UiTheme::ALL
+    }
+
+    fn open_theme_picker(&mut self) {
+        let selected = UiTheme::ALL
+            .iter()
+            .position(|theme| *theme == self.theme)
+            .unwrap_or(0);
+        self.theme_picker = Some(ThemePickerState {
+            selected,
+            original: self.theme,
+        });
+        self.set_toast(ToastLevel::Info, "Theme picker opened (live preview)");
+    }
+
+    fn theme_picker_next(&mut self) {
+        if let Some(state) = &mut self.theme_picker {
+            state.selected = (state.selected + 1) % UiTheme::ALL.len();
+            self.theme = UiTheme::ALL[state.selected];
+        }
+    }
+
+    fn theme_picker_prev(&mut self) {
+        if let Some(state) = &mut self.theme_picker {
+            if state.selected == 0 {
+                state.selected = UiTheme::ALL.len() - 1;
+            } else {
+                state.selected -= 1;
+            }
+            self.theme = UiTheme::ALL[state.selected];
+        }
+    }
+
+    fn theme_picker_confirm(&mut self) {
+        if self.theme_picker.take().is_some() {
+            self.set_toast(
+                ToastLevel::Success,
+                format!("Theme set: {}", self.theme.label()),
+            );
+        }
+    }
+
+    fn theme_picker_cancel(&mut self) {
+        if let Some(state) = self.theme_picker.take() {
+            self.theme = state.original;
+            self.set_toast(ToastLevel::Info, "Theme picker canceled");
+        }
     }
 
     fn scroll_up(&mut self, amount: u16) {
@@ -1474,6 +1582,20 @@ pub async fn run(
                         continue;
                     }
 
+                    if app.theme_picker.is_some() {
+                        match action {
+                            input::InputAction::Quit => app.request_quit(),
+                            input::InputAction::DismissOverlay => app.theme_picker_cancel(),
+                            input::InputAction::NewLine | input::InputAction::Send => {
+                                app.theme_picker_confirm()
+                            }
+                            input::InputAction::ScrollUp(_) => app.theme_picker_prev(),
+                            input::InputAction::ScrollDown(_) => app.theme_picker_next(),
+                            _ => {}
+                        }
+                        continue;
+                    }
+
                     match action {
                         input::InputAction::Quit => app.request_quit(),
                         input::InputAction::ToggleHelp => app.toggle_help(),
@@ -1792,6 +1914,11 @@ async fn execute_slash_command(
     default_model: &str,
     prompt: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    if prompt.trim() == "/themes" {
+        app.open_theme_picker();
+        return Ok(());
+    }
+
     if prompt == "/models refresh" || prompt == "/model refresh" {
         let client = reqwest::Client::new();
         match ollama::models::list_models(&client, &app.url).await {
@@ -2988,7 +3115,7 @@ mod tests {
     use super::{
         autocomplete_suggestions, is_cloud_model_name, load_ui_state_from_path,
         next_autocomplete_value, save_ui_state_to_path, App, ModelBucket, SessionEntry,
-        SidebarItem, UiRuntimeState, WorkspaceEntry,
+        SidebarItem, UiRuntimeState, UiTheme, WorkspaceEntry,
     };
     use std::{
         fs,
@@ -3069,6 +3196,7 @@ mod tests {
         assert_eq!(
             state,
             UiRuntimeState {
+                theme: UiTheme::EmeraldDusk,
                 models_collapsed: true,
                 cloud_models_collapsed: true,
                 local_models_collapsed: false,
@@ -3090,6 +3218,7 @@ mod tests {
         assert!(next.collapsed_workspace_ids.contains(&2));
         assert!(next.collapsed_workspace_ids.contains(&4));
         assert_eq!(next.sidebar_index, 7);
+        assert_eq!(next.theme, UiTheme::EmeraldDusk);
     }
 
     #[test]
@@ -3101,6 +3230,7 @@ mod tests {
         let root = std::env::temp_dir().join(format!("olly-ui-state-{unique}"));
         let path = root.join("ui_state.json");
         let state = UiRuntimeState {
+            theme: UiTheme::SakuraNight,
             models_collapsed: true,
             cloud_models_collapsed: false,
             local_models_collapsed: true,
@@ -3123,6 +3253,15 @@ mod tests {
         assert_eq!(
             autocomplete_suggestions("/mod", &models, &sample_workspaces(), &sample_sessions()),
             vec![String::from("/model ")]
+        );
+    }
+
+    #[test]
+    fn autocomplete_includes_themes_command() {
+        let models = vec![String::from("llama3.2:latest")];
+        assert_eq!(
+            autocomplete_suggestions("/the", &models, &sample_workspaces(), &sample_sessions()),
+            vec![String::from("/themes ")]
         );
     }
 
