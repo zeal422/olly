@@ -4,6 +4,32 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project follows Semantic Versioning.
 
+## [0.0.9] - 2026-03-30
+
+### Added
+- Completed refactor architecture slices under `src/app/`:
+  - command decomposition (`commands/parser`, `commands/dispatch`, `commands/handlers/*`),
+  - runtime loop decomposition (`runtime/startup`, `runtime/event_loop`, `runtime/key_actions`, `runtime/overlays`, `runtime/shutdown`),
+  - chat send/stream pipeline extraction (`chat_pipeline.rs`),
+  - workspace/session domain helpers (`domain/workspace_session`, `domain/context_state`),
+  - autocomplete provider split (`autocomplete/core` + `autocomplete/providers/*`),
+  - TUI modal module ownership (`tui/modals.rs`) with shared confirm-delete body helper.
+- New targeted refactor regression tests:
+  - runtime scroll-route precedence tests (`runtime::key_actions`),
+  - overlay interception and dismissal tests (`runtime::overlays`),
+  - deterministic modal guard tests (`tui::modals`).
+- Refactor baseline checklist doc: `docs/REFACTOR_BASELINE.md`.
+
+### Fixed
+- Clippy `question_mark` violations in autocomplete providers (`/session`, `/workspace`) so the refactor tree stays warning-clean under `-D warnings`.
+- Overlay-path regressions by explicitly validating overlay consumption vs non-overlay routing in runtime tests.
+
+### Modified
+- `src/app/mod.rs` command handling now remains an orchestration adapter over dispatcher/handler modules.
+- `run()` now delegates startup/loop/shutdown responsibilities to `runtime::*` modules.
+- TUI draw path now delegates help/delete/theme modal rendering through `tui/modals` helpers.
+- `REFACTOR_PLAN.md` is fully checked off and recorded as completed implementation work.
+
 ## [0.0.8] - 2026-03-30
 
 ### Added

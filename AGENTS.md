@@ -24,19 +24,23 @@ The codebase follows a modular structure:
 
 ```
 src/
-├── main.rs          # CLI entry point with clap argument parsing
-├── lib.rs           # Module exports
-├── app/             # Core application logic and TUI
-│   ├── mod.rs       # Main App struct, event handling, state management
-│   ├── context.rs   # Application context
-│   ├── input.rs     # Input handling
-│   └── tui/         # Terminal UI rendering components
-├── config/          # Configuration management (config.toml, platform paths)
-├── history/         # Chat history and SQLite persistence
-├── ollama/          # Ollama API client (streaming chat, models)
-└── workspace/       # Workspace and session management
+|-- main.rs                  # CLI entry point with clap argument parsing
+|-- lib.rs                   # Module exports
+|-- app/                     # Core application logic and TUI
+|   |-- mod.rs               # App state + orchestration adapters
+|   |-- context.rs           # Application context
+|   |-- input.rs             # Input handling / key action mapping
+|   |-- commands/            # Slash-command parser/dispatcher/handlers
+|   |-- runtime/             # Startup, event loop, overlay/key routing, shutdown
+|   |-- autocomplete/        # Command suggestion providers
+|   |-- domain/              # Workspace/session transition helpers
+|   |-- chat_pipeline.rs     # Send + stream + persistence pipeline
+|   `-- tui/                 # Terminal UI rendering components
+|-- config/                  # Configuration management (config.toml, platform paths)
+|-- history/                 # Chat history and SQLite persistence
+|-- ollama/                  # Ollama API client (streaming chat, models)
+`-- workspace/               # Workspace and session management
 ```
-
 ### Key Technologies
 - **TUI Framework**: `ratatui` 0.29.0 with `crossterm` for terminal handling
 - **Async Runtime**: `tokio` with multi-threaded runtime
@@ -223,18 +227,22 @@ autocomplete = "Tab"
 
 | Directory/File | Purpose |
 |----------------|---------|
-| `src/app/mod.rs` | Core App struct, event loop, state management (~4200 lines) |
-| `src/app/tui/` | Terminal UI rendering components |
+| `src/app/mod.rs` | Core App struct + orchestration adapters |
+| `src/app/commands/` | Slash-command parser/dispatcher/handler modules |
+| `src/app/runtime/` | Startup/event-loop/key/overlay/shutdown runtime modules |
+| `src/app/autocomplete/` | Command-scoped autocomplete providers |
+| `src/app/domain/` | Workspace/session domain helpers |
+| `src/app/chat_pipeline.rs` | Chat send/stream/persist pipeline |
+| `src/app/tui/` | Terminal UI rendering modules |
 | `src/ollama/` | Ollama API client with streaming support |
 | `src/workspace/` | Workspace and session SQLite management |
 | `src/history/` | Chat history persistence |
 | `src/config/` | Configuration loading and defaults |
-| `tests/` | Integration tests (25 test files) |
+| `tests/` | Integration tests |
 | `scripts/` | Build, check, release, installer scripts |
 | `docs/` | Documentation including release policy |
 | `installer/` | Windows installer configuration |
 | `.git-cliff.toml` | Changelog generation config |
-
 ## Important Notes
 
 - **License**: Proprietary software owned by VectorMedia
@@ -242,3 +250,4 @@ autocomplete = "Tab"
 - **Security**: Report security issues privately to maintainers
 - **Release Process**: Requires all quality gates to pass (fmt, clippy, tests)
 - **Cross-platform**: Supports Linux (x86_64, aarch64), macOS (Intel, Apple Silicon), Windows (x86_64)
+

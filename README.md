@@ -18,6 +18,17 @@ Olly is a Rust terminal UI client for Ollama. It focuses on a fast chat loop for
 - Per-session footer telemetry including context usage (`ctx:used/max`) against model context window.
 - Footer context telemetry is restored across app restarts for the same session/model context.
 
+## Internal Architecture
+
+The app keeps user-facing behavior stable while separating responsibilities in `src/app/`:
+
+- `commands/`: slash-command parse, route, and handler modules.
+- `runtime/`: startup, event loop, key-action routing, overlay routing, terminal shutdown.
+- `chat_pipeline.rs`: send/stream/persist flow for chat messages.
+- `domain/`: workspace/session transition and context-state helpers.
+- `autocomplete/`: command-scoped suggestion providers.
+- `tui/`: rendering modules for palette/sidebar/chat/input/modals/markdown.
+
 ## Installation
 
 ### Option 1: Prebuilt Binaries (Recommended)

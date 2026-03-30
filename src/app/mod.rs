@@ -1,5 +1,10 @@
+pub mod autocomplete;
+pub mod chat_pipeline;
+pub mod commands;
 pub mod context;
+pub mod domain;
 pub mod input;
+pub mod runtime;
 pub mod tui;
 
 use std::{
@@ -9,15 +14,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use base64::{engine::general_purpose::STANDARD, Engine as _};
 use chrono::Local;
-use crossterm::{
-    cursor::SetCursorStyle,
-    event::{self, Event},
-    execute,
-    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
-};
-use ratatui::{backend::CrosstermBackend, Terminal};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -25,12 +22,12 @@ use crate::{
     history,
     ollama::{
         self,
-        chat::{ChatMessage, ChatToolCall, ParsedStreamChunk},
+        chat::{ChatMessage, ChatToolCall},
     },
     workspace::manager::WorkspaceManager,
 };
 
-const COMMAND_SUGGESTIONS: &[&str] = &[
+pub(crate) const COMMAND_SUGGESTIONS: &[&str] = &[
     "/commands",
     "/models",
     "/themes",
@@ -44,10 +41,10 @@ const COMMAND_SUGGESTIONS: &[&str] = &[
     "/model",
     "/url",
 ];
-const AUTO_SCROLL_TARGET: u16 = 30_000;
+pub(crate) const AUTO_SCROLL_TARGET: u16 = 30_000;
 
 #[cfg(windows)]
-fn maximize_console_window() {
+pub(crate) fn maximize_console_window() {
     #[link(name = "Kernel32")]
     extern "system" {
         fn GetConsoleWindow() -> *mut core::ffi::c_void;
@@ -70,7 +67,7 @@ fn maximize_console_window() {
 }
 
 #[cfg(windows)]
-fn hide_console_scrollbars() {
+pub(crate) fn hide_console_scrollbars() {
     #[link(name = "Kernel32")]
     extern "system" {
         fn GetConsoleWindow() -> *mut core::ffi::c_void;
@@ -93,7 +90,7 @@ fn hide_console_scrollbars() {
 }
 
 #[cfg(windows)]
-fn snap_console_window_to_cell_grid() {
+pub(crate) fn snap_console_window_to_cell_grid() {
     #[repr(C)]
     struct Coord {
         x: i16,
@@ -220,7 +217,7 @@ fn snap_console_window_to_cell_grid() {
 }
 
 #[cfg(windows)]
-fn sync_console_buffer_to_window(normalize_origin: bool) {
+pub(crate) fn sync_console_buffer_to_window(normalize_origin: bool) {
     #[repr(C)]
     struct Coord {
         x: i16,
@@ -316,16 +313,16 @@ fn sync_console_buffer_to_window(normalize_origin: bool) {
 }
 
 #[cfg(not(windows))]
-fn maximize_console_window() {}
+pub(crate) fn maximize_console_window() {}
 
 #[cfg(not(windows))]
-fn hide_console_scrollbars() {}
+pub(crate) fn hide_console_scrollbars() {}
 
 #[cfg(not(windows))]
-fn snap_console_window_to_cell_grid() {}
+pub(crate) fn snap_console_window_to_cell_grid() {}
 
 #[cfg(not(windows))]
-fn sync_console_buffer_to_window(_normalize_origin: bool) {}
+pub(crate) fn sync_console_buffer_to_window(_normalize_origin: bool) {}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "kebab-case")]
@@ -456,7 +453,7 @@ struct SessionContextSnapshot {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
 #[serde(default)]
-struct UiRuntimeState {
+pub(crate) struct UiRuntimeState {
     model: Option<String>,
     theme: UiTheme,
     models_collapsed: bool,
@@ -520,6 +517,32 @@ pub struct App {
     should_quit: bool,
 }
 
+#[allow(dead_code)]
+pub(crate) struct AppUiStateView<'a> {
+    pub(crate) focus: FocusPane,
+    pub(crate) show_help: bool,
+    pub(crate) toast: Option<&'a Toast>,
+    pub(crate) theme: UiTheme,
+    pub(crate) sidebar_index: usize,
+}
+
+#[allow(dead_code)]
+pub(crate) struct AppSessionStateView<'a> {
+    pub(crate) active_workspace_id: i64,
+    pub(crate) active_session_id: i64,
+    pub(crate) workspace_name: &'a str,
+    pub(crate) active_session_title: &'a str,
+    pub(crate) workspace_root_path: Option<&'a str>,
+}
+
+#[allow(dead_code)]
+pub(crate) struct AppTelemetryStateView {
+    pub(crate) model_context_window: Option<u32>,
+    pub(crate) prompt_tokens_used: Option<u32>,
+    pub(crate) last_completion_tokens: Option<u32>,
+    pub(crate) peak_prompt_tokens: u32,
+}
+
 impl App {
     pub fn new(url: String, model: String) -> Self {
         Self {
@@ -572,7 +595,39 @@ impl App {
         self.should_quit
     }
 
-    fn snapshot_ui_state(&self) -> UiRuntimeState {
+    #[allow(dead_code)]
+    pub(crate) fn ui_state_view(&self) -> AppUiStateView<'_> {
+        AppUiStateView {
+            focus: self.focus,
+            show_help: self.show_help,
+            toast: self.toast.as_ref(),
+            theme: self.theme,
+            sidebar_index: self.sidebar_index,
+        }
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn session_state_view(&self) -> AppSessionStateView<'_> {
+        AppSessionStateView {
+            active_workspace_id: self.active_workspace_id,
+            active_session_id: self.active_session_id,
+            workspace_name: &self.workspace_name,
+            active_session_title: &self.active_session_title,
+            workspace_root_path: self.workspace_root_path.as_deref(),
+        }
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn telemetry_state_view(&self) -> AppTelemetryStateView {
+        AppTelemetryStateView {
+            model_context_window: self.model_context_window,
+            prompt_tokens_used: self.prompt_tokens_used,
+            last_completion_tokens: self.last_completion_tokens,
+            peak_prompt_tokens: self.peak_prompt_tokens,
+        }
+    }
+
+    pub(crate) fn snapshot_ui_state(&self) -> UiRuntimeState {
         let mut collapsed_workspace_ids = self
             .collapsed_workspace_ids
             .iter()
@@ -634,11 +689,11 @@ impl App {
         })
     }
 
-    fn persist_active_session_context_snapshot(&mut self) {
+    pub(crate) fn persist_active_session_context_snapshot(&mut self) {
         self.restored_session_context = self.capture_active_session_context_snapshot();
     }
 
-    fn restore_session_context_snapshot_if_match(&mut self) {
+    pub(crate) fn restore_session_context_snapshot_if_match(&mut self) {
         let Some(snapshot) = self.restored_session_context.as_ref() else {
             return;
         };
@@ -685,7 +740,7 @@ impl App {
         self.should_quit = true;
     }
 
-    fn request_quit(&mut self) {
+    pub(crate) fn request_quit(&mut self) {
         let now = Instant::now();
         if let Some(until) = self.quit_armed_until {
             if now <= until {
@@ -714,23 +769,23 @@ impl App {
         self.chat_scroll = AUTO_SCROLL_TARGET;
     }
 
-    fn push_user(&mut self, content: String, image_count: usize) {
+    pub(crate) fn push_user(&mut self, content: String, image_count: usize) {
         self.push_message("You", content, image_count, None);
     }
 
-    fn push_assistant(&mut self, content: String, tool_calls_preview: Option<String>) {
+    pub(crate) fn push_assistant(&mut self, content: String, tool_calls_preview: Option<String>) {
         self.push_message("Assistant", content, 0, tool_calls_preview);
     }
 
-    fn push_tool(&mut self, content: String, tool_calls_preview: Option<String>) {
+    pub(crate) fn push_tool(&mut self, content: String, tool_calls_preview: Option<String>) {
         self.push_message("Tool", content, 0, tool_calls_preview);
     }
 
-    fn push_system(&mut self, content: String) {
+    pub(crate) fn push_system(&mut self, content: String) {
         self.push_message("System", content, 0, None);
     }
 
-    fn set_toast(&mut self, level: ToastLevel, message: impl Into<String>) {
+    pub(crate) fn set_toast(&mut self, level: ToastLevel, message: impl Into<String>) {
         self.toast = Some(Toast {
             message: message.into(),
             level,
@@ -738,7 +793,7 @@ impl App {
         });
     }
 
-    fn dismiss_overlay(&mut self) {
+    pub(crate) fn dismiss_overlay(&mut self) {
         if self.show_help {
             self.show_help = false;
             return;
@@ -746,11 +801,11 @@ impl App {
         self.toast = None;
     }
 
-    fn toggle_help(&mut self) {
+    pub(crate) fn toggle_help(&mut self) {
         self.show_help = !self.show_help;
     }
 
-    fn switch_focus(&mut self) {
+    pub(crate) fn switch_focus(&mut self) {
         self.focus = match self.focus {
             FocusPane::Workspaces => FocusPane::Chat,
             FocusPane::Chat => FocusPane::Workspaces,
@@ -778,14 +833,14 @@ impl App {
         self.set_toast(ToastLevel::Info, "Theme picker opened (live preview)");
     }
 
-    fn theme_picker_next(&mut self) {
+    pub(crate) fn theme_picker_next(&mut self) {
         if let Some(state) = &mut self.theme_picker {
             state.selected = (state.selected + 1) % UiTheme::ALL.len();
             self.theme = UiTheme::ALL[state.selected];
         }
     }
 
-    fn theme_picker_prev(&mut self) {
+    pub(crate) fn theme_picker_prev(&mut self) {
         if let Some(state) = &mut self.theme_picker {
             if state.selected == 0 {
                 state.selected = UiTheme::ALL.len() - 1;
@@ -796,7 +851,7 @@ impl App {
         }
     }
 
-    fn theme_picker_confirm(&mut self) {
+    pub(crate) fn theme_picker_confirm(&mut self) {
         if self.theme_picker.take().is_some() {
             self.set_toast(
                 ToastLevel::Success,
@@ -805,7 +860,7 @@ impl App {
         }
     }
 
-    fn theme_picker_cancel(&mut self) {
+    pub(crate) fn theme_picker_cancel(&mut self) {
         if let Some(state) = self.theme_picker.take() {
             self.theme = state.original;
             self.set_toast(ToastLevel::Info, "Theme picker canceled");
@@ -823,7 +878,7 @@ impl App {
             .min(AUTO_SCROLL_TARGET);
     }
 
-    fn take_input_for_send(&mut self) -> Option<String> {
+    pub(crate) fn take_input_for_send(&mut self) -> Option<String> {
         let trimmed = self.input.trim().to_string();
         if trimmed.is_empty() {
             return None;
@@ -835,7 +890,7 @@ impl App {
         Some(trimmed)
     }
 
-    fn reset_command_selection(&mut self) {
+    pub(crate) fn reset_command_selection(&mut self) {
         self.command_suggestion_index = 0;
     }
 
@@ -843,7 +898,7 @@ impl App {
         self.input.chars().count()
     }
 
-    fn clear_input_editor_state(&mut self) {
+    pub(crate) fn clear_input_editor_state(&mut self) {
         self.input_cursor_char_index = self.input_char_len();
         self.input_cursor_preferred_column = None;
     }
@@ -872,13 +927,13 @@ impl App {
         self.input_cursor_char_index = self.input_cursor_char_index.min(self.input_char_len());
     }
 
-    fn move_input_cursor_left(&mut self) {
+    pub(crate) fn move_input_cursor_left(&mut self) {
         self.clamp_input_cursor();
         self.input_cursor_char_index = self.input_cursor_char_index.saturating_sub(1);
         self.input_cursor_preferred_column = None;
     }
 
-    fn move_input_cursor_right(&mut self) {
+    pub(crate) fn move_input_cursor_right(&mut self) {
         self.clamp_input_cursor();
         self.input_cursor_char_index =
             (self.input_cursor_char_index + 1).min(self.input_char_len());
@@ -918,7 +973,7 @@ impl App {
         char_index + column
     }
 
-    fn move_input_cursor_up(&mut self) {
+    pub(crate) fn move_input_cursor_up(&mut self) {
         let (line, col) = self.input_line_col_for_cursor();
         if line == 0 {
             return;
@@ -928,7 +983,7 @@ impl App {
         self.input_cursor_preferred_column = Some(target_col);
     }
 
-    fn move_input_cursor_down(&mut self) {
+    pub(crate) fn move_input_cursor_down(&mut self) {
         let (line, col) = self.input_line_col_for_cursor();
         if line + 1 >= self.input_line_count() {
             return;
@@ -938,7 +993,7 @@ impl App {
         self.input_cursor_preferred_column = Some(target_col);
     }
 
-    fn insert_input_char(&mut self, ch: char) {
+    pub(crate) fn insert_input_char(&mut self, ch: char) {
         self.clamp_input_cursor();
         let insert_at = Self::byte_index_for_char(&self.input, self.input_cursor_char_index);
         self.input.insert(insert_at, ch);
@@ -947,7 +1002,7 @@ impl App {
         self.reset_command_selection();
     }
 
-    fn backspace_input_char(&mut self) {
+    pub(crate) fn backspace_input_char(&mut self) {
         self.clamp_input_cursor();
         if self.input_cursor_char_index == 0 {
             return;
@@ -960,11 +1015,11 @@ impl App {
         self.reset_command_selection();
     }
 
-    fn insert_newline_at_cursor(&mut self) {
+    pub(crate) fn insert_newline_at_cursor(&mut self) {
         self.insert_input_char('\n');
     }
 
-    fn to_ollama_messages(&self) -> Vec<ChatMessage> {
+    pub(crate) fn to_ollama_messages(&self) -> Vec<ChatMessage> {
         self.messages
             .iter()
             .filter_map(|m| {
@@ -1012,7 +1067,7 @@ impl App {
         })
     }
 
-    fn refresh_workspaces(
+    pub(crate) fn refresh_workspaces(
         &mut self,
         manager: &WorkspaceManager,
     ) -> Result<(), Box<dyn std::error::Error>> {
@@ -1049,7 +1104,7 @@ impl App {
         Ok(())
     }
 
-    fn sync_active_workspace_label(&mut self, workspace_id: i64) {
+    pub(crate) fn sync_active_workspace_label(&mut self, workspace_id: i64) {
         if let Some(workspace) = self.workspaces.iter().find(|w| w.id == workspace_id) {
             self.active_workspace_id = workspace.id;
             self.workspace_name = workspace.name.clone();
@@ -1065,11 +1120,11 @@ impl App {
         }
     }
 
-    fn has_active_session(&self) -> bool {
+    pub(crate) fn has_active_session(&self) -> bool {
         self.active_workspace_id > 0 && self.active_session_id > 0
     }
 
-    fn clear_active_workspace_state(&mut self) {
+    pub(crate) fn clear_active_workspace_state(&mut self) {
         self.active_workspace_id = 0;
         self.workspace_name = String::from("No Workspace");
         self.workspace_root_path = None;
@@ -1094,7 +1149,7 @@ impl App {
         }
     }
 
-    fn refresh_sessions(
+    pub(crate) fn refresh_sessions(
         &mut self,
         manager: &WorkspaceManager,
         workspace_id: i64,
@@ -1218,14 +1273,14 @@ impl App {
         entries
     }
 
-    fn sidebar_up(&mut self, amount: u16) {
+    pub(crate) fn sidebar_up(&mut self, amount: u16) {
         if self.sidebar_item_count() == 0 {
             return;
         }
         self.sidebar_index = self.sidebar_index.saturating_sub(amount as usize);
     }
 
-    fn sidebar_down(&mut self, amount: u16) {
+    pub(crate) fn sidebar_down(&mut self, amount: u16) {
         if self.sidebar_item_count() == 0 {
             return;
         }
@@ -1233,7 +1288,7 @@ impl App {
         self.sidebar_index = (self.sidebar_index + amount as usize).min(max);
     }
 
-    fn focus_active_session(&mut self, workspace_id: i64, conversation_id: i64) {
+    pub(crate) fn focus_active_session(&mut self, workspace_id: i64, conversation_id: i64) {
         if workspace_id <= 0 || conversation_id <= 0 {
             self.clamp_sidebar_index();
             return;
@@ -1259,7 +1314,7 @@ impl App {
         self.clamp_sidebar_index();
     }
 
-    fn activate_sidebar_selection(
+    pub(crate) fn activate_sidebar_selection(
         &mut self,
         manager: &WorkspaceManager,
         session: &mut crate::workspace::WorkspaceSession,
@@ -1414,7 +1469,7 @@ impl App {
         Ok(())
     }
 
-    fn autocomplete_command(&mut self) {
+    pub(crate) fn autocomplete_command(&mut self) {
         let suggestions =
             autocomplete_suggestions(&self.input, &self.models, &self.workspaces, &self.sessions);
         if suggestions.is_empty() {
@@ -1429,7 +1484,7 @@ impl App {
         }
     }
 
-    fn autocomplete_command_prev(&mut self) {
+    pub(crate) fn autocomplete_command_prev(&mut self) {
         let suggestions =
             autocomplete_suggestions(&self.input, &self.models, &self.workspaces, &self.sessions);
         if suggestions.is_empty() {
@@ -1442,7 +1497,7 @@ impl App {
         }
     }
 
-    fn autocomplete_command_next(&mut self) {
+    pub(crate) fn autocomplete_command_next(&mut self) {
         let suggestions =
             autocomplete_suggestions(&self.input, &self.models, &self.workspaces, &self.sessions);
         if suggestions.is_empty() {
@@ -1451,11 +1506,11 @@ impl App {
         self.command_suggestion_index = (self.command_suggestion_index + 1) % suggestions.len();
     }
 
-    fn is_command_suggestion_mode(&self) -> bool {
+    pub(crate) fn is_command_suggestion_mode(&self) -> bool {
         self.is_slash_command_input() && !self.autocomplete_options().is_empty()
     }
 
-    fn is_slash_command_input(&self) -> bool {
+    pub(crate) fn is_slash_command_input(&self) -> bool {
         self.input.trim_start().starts_with('/') && !self.input.contains('\n')
     }
 
@@ -1510,343 +1565,8 @@ fn autocomplete_suggestions(
     workspaces: &[WorkspaceEntry],
     sessions: &[SessionEntry],
 ) -> Vec<String> {
-    let raw = input.trim_start();
-    if !raw.starts_with('/') || raw.contains('\n') {
-        return Vec::new();
-    }
-    let token = raw.trim_end();
-
-    if token == "/models" {
-        if raw.ends_with(' ') {
-            return vec![
-                String::from("/models refresh"),
-                String::from("/models add "),
-                String::from("/models remove "),
-            ];
-        }
-        return vec![String::from("/models ")];
-    }
-
-    if let Some(rest_raw) = raw.strip_prefix("/models ") {
-        let rest = rest_raw.trim_start();
-        if rest.is_empty() {
-            return vec![
-                String::from("/models refresh"),
-                String::from("/models add "),
-                String::from("/models remove "),
-            ];
-        }
-        let parts = rest.split_whitespace().collect::<Vec<_>>();
-        let sub = parts.first().copied().unwrap_or_default();
-        let subcommands = ["refresh", "add", "remove"];
-        let has_sub_arg = rest.contains(' ');
-        if !has_sub_arg {
-            return subcommands
-                .into_iter()
-                .filter(|candidate| candidate.starts_with(sub))
-                .map(|candidate| match candidate {
-                    "refresh" => String::from("/models refresh"),
-                    _ => format!("/models {candidate} "),
-                })
-                .collect();
-        }
-        if sub == "remove" {
-            let arg_partial = rest[sub.len()..].trim();
-            return models
-                .iter()
-                .filter(|model| {
-                    arg_partial.is_empty()
-                        || model
-                            .to_lowercase()
-                            .starts_with(&arg_partial.to_lowercase())
-                })
-                .map(|model| format!("/models remove {model}"))
-                .collect();
-        }
-    }
-
-    if token == "/model" || token == "/mod" {
-        if raw.ends_with(' ') {
-            return models
-                .iter()
-                .map(|model| format!("/model {model}"))
-                .collect();
-        }
-        return vec![String::from("/model ")];
-    }
-
-    if let Some(partial) = raw
-        .strip_prefix("/model ")
-        .or_else(|| raw.strip_prefix("/mod "))
-    {
-        let partial = partial.trim();
-        if partial.is_empty() {
-            return models
-                .iter()
-                .map(|model| format!("/model {model}"))
-                .collect();
-        }
-        return models
-            .iter()
-            .filter(|model| model.starts_with(partial))
-            .map(|found| format!("/model {found}"))
-            .collect();
-    }
-
-    if token == "/workspace" {
-        if raw.ends_with(' ') {
-            return workspace_subcommand_suggestions();
-        }
-        return vec![String::from("/workspace ")];
-    }
-
-    if token == "/workspaces" {
-        return vec![String::from("/workspace ")];
-    }
-
-    if let Some(rest_raw) = raw.strip_prefix("/workspace ") {
-        let rest = rest_raw.trim_start();
-        if rest.is_empty() {
-            return workspace_subcommand_suggestions();
-        }
-
-        let parts = rest.split_whitespace().collect::<Vec<_>>();
-        let sub = parts.first().copied().unwrap_or_default();
-        let subcommands = [
-            "list", "switch", "create", "rename", "delete", "export", "import", "where", "set-path",
-        ];
-        let has_sub_arg = rest.contains(' ');
-
-        if !has_sub_arg {
-            return subcommands
-                .into_iter()
-                .filter(|candidate| candidate.starts_with(sub))
-                .map(|candidate| match candidate {
-                    "list" | "where" => format!("/workspace {candidate}"),
-                    _ => format!("/workspace {candidate} "),
-                })
-                .collect();
-        }
-
-        if sub == "switch" || sub == "delete" {
-            let arg_partial = rest[sub.len()..].trim();
-            if sub == "delete" && arg_partial.is_empty() {
-                return vec![
-                    String::from("/workspace delete"),
-                    String::from("/workspace delete --confirm"),
-                    String::from("/workspace delete --cancel"),
-                ];
-            }
-            let mut suggestions = Vec::new();
-            if sub == "delete" {
-                suggestions.push(String::from("/workspace delete --confirm "));
-                suggestions.push(String::from("/workspace delete --cancel"));
-            }
-            suggestions.extend(workspaces.iter().flat_map(|workspace| {
-                let by_id = format!("/workspace {sub} {}", workspace.id);
-                let by_name = format!("/workspace {sub} {}", workspace.name);
-                [by_id, by_name]
-            }));
-            let mut suggestions = suggestions
-                .into_iter()
-                .filter(|candidate| {
-                    if arg_partial.is_empty() {
-                        true
-                    } else {
-                        candidate.to_lowercase().starts_with(&format!(
-                            "/workspace {sub} {}",
-                            arg_partial.to_lowercase()
-                        ))
-                    }
-                })
-                .collect::<Vec<_>>();
-            suggestions.sort();
-            suggestions.dedup();
-            return suggestions;
-        }
-
-        if sub == "rename" {
-            let arg_partial = rest[sub.len()..].trim();
-            if arg_partial.is_empty() {
-                return vec![String::from("/workspace rename ")];
-            }
-            return vec![format!("/workspace rename {arg_partial}")];
-        }
-
-        if sub == "set-path" {
-            let arg_partial = rest[sub.len()..].trim();
-            if let Some((selector_part, path_partial)) = arg_partial.split_once(" --path ") {
-                let command_prefix =
-                    format!("/workspace set-path {} --path ", selector_part.trim());
-                let path_suggestions = filesystem_directory_suggestions(path_partial);
-                if path_suggestions.is_empty() {
-                    return vec![command_prefix];
-                }
-                return path_suggestions
-                    .into_iter()
-                    .map(|path| format!("{command_prefix}{path}"))
-                    .collect();
-            }
-            let mut suggestions = workspaces
-                .iter()
-                .flat_map(|workspace| {
-                    let by_id = format!("/workspace set-path {} --path ", workspace.id);
-                    let by_name = format!("/workspace set-path {} --path ", workspace.name);
-                    [by_id, by_name]
-                })
-                .filter(|candidate| {
-                    if arg_partial.is_empty() {
-                        true
-                    } else {
-                        candidate.to_lowercase().starts_with(&format!(
-                            "/workspace set-path {}",
-                            arg_partial.to_lowercase()
-                        ))
-                    }
-                })
-                .collect::<Vec<_>>();
-            suggestions.sort();
-            suggestions.dedup();
-            return suggestions;
-        }
-
-        if sub == "create" {
-            let arg_partial = rest[sub.len()..].trim();
-            if let Some((name_part, path_partial)) = arg_partial.split_once(" --path ") {
-                let command_prefix = format!("/workspace create {} --path ", name_part.trim());
-                let path_suggestions = filesystem_directory_suggestions(path_partial);
-                if path_suggestions.is_empty() {
-                    return vec![command_prefix];
-                }
-                return path_suggestions
-                    .into_iter()
-                    .map(|path| format!("{command_prefix}{path}"))
-                    .collect();
-            }
-            if !arg_partial.is_empty() && !arg_partial.contains(" --path ") {
-                return vec![format!("/workspace create {arg_partial} --path ")];
-            }
-        }
-    }
-
-    if token == "/session" {
-        if raw.ends_with(' ') {
-            return session_subcommand_suggestions();
-        }
-        return vec![String::from("/session ")];
-    }
-
-    if let Some(rest_raw) = raw.strip_prefix("/session ") {
-        let rest = rest_raw.trim_start();
-        if rest.is_empty() {
-            return session_subcommand_suggestions();
-        }
-
-        let parts = rest.split_whitespace().collect::<Vec<_>>();
-        let sub = parts.first().copied().unwrap_or_default();
-        let subcommands = ["list", "new", "create", "switch", "rename", "delete"];
-        let has_sub_arg = rest.contains(' ');
-
-        if !has_sub_arg {
-            return subcommands
-                .into_iter()
-                .filter(|candidate| candidate.starts_with(sub))
-                .map(|candidate| match candidate {
-                    "list" => String::from("/session list"),
-                    _ => format!("/session {candidate} "),
-                })
-                .collect();
-        }
-
-        if sub == "switch" {
-            let arg_partial = rest[sub.len()..].trim();
-            let mut suggestions = sessions
-                .iter()
-                .flat_map(|session| {
-                    let by_id = format!("/session switch {}", session.id);
-                    let by_name = format!("/session switch {}", session.title);
-                    [by_id, by_name]
-                })
-                .filter(|candidate| {
-                    if arg_partial.is_empty() {
-                        true
-                    } else {
-                        candidate
-                            .to_lowercase()
-                            .starts_with(&format!("/session switch {}", arg_partial.to_lowercase()))
-                    }
-                })
-                .collect::<Vec<_>>();
-            suggestions.sort();
-            suggestions.dedup();
-            return suggestions;
-        }
-
-        if sub == "rename" {
-            let arg_partial = rest[sub.len()..].trim();
-            let mut suggestions = sessions
-                .iter()
-                .flat_map(|session| {
-                    let by_id = format!("/session rename {} ", session.id);
-                    let by_name = format!("/session rename {} --to ", session.title);
-                    [by_id, by_name]
-                })
-                .filter(|candidate| {
-                    if arg_partial.is_empty() {
-                        true
-                    } else {
-                        candidate
-                            .to_lowercase()
-                            .starts_with(&format!("/session rename {}", arg_partial.to_lowercase()))
-                    }
-                })
-                .collect::<Vec<_>>();
-            suggestions.sort();
-            suggestions.dedup();
-            return suggestions;
-        }
-
-        if sub == "delete" {
-            return vec![String::from("/session delete")];
-        }
-    }
-
-    if token.contains(' ') {
-        return Vec::new();
-    }
-
-    COMMAND_SUGGESTIONS
-        .iter()
-        .find(|candidate| candidate.starts_with(token))
-        .map(|found| vec![format!("{found} ")])
-        .unwrap_or_default()
+    autocomplete::core::suggestions(input, models, workspaces, sessions)
 }
-
-fn workspace_subcommand_suggestions() -> Vec<String> {
-    vec![
-        String::from("/workspace list"),
-        String::from("/workspace switch "),
-        String::from("/workspace create "),
-        String::from("/workspace rename "),
-        String::from("/workspace delete "),
-        String::from("/workspace where"),
-        String::from("/workspace set-path "),
-        String::from("/workspace export "),
-        String::from("/workspace import "),
-    ]
-}
-
-fn session_subcommand_suggestions() -> Vec<String> {
-    vec![
-        String::from("/session list"),
-        String::from("/session new "),
-        String::from("/session create "),
-        String::from("/session switch "),
-        String::from("/session rename "),
-        String::from("/session delete"),
-    ]
-}
-
 #[cfg(test)]
 fn next_autocomplete_value(current_input: &str, suggestions: &[String]) -> Option<String> {
     if suggestions.is_empty() {
@@ -1863,86 +1583,19 @@ fn next_autocomplete_value(current_input: &str, suggestions: &[String]) -> Optio
     Some(suggestions[0].clone())
 }
 
-fn filesystem_directory_suggestions(partial: &str) -> Vec<String> {
-    let partial = partial.trim();
-    let mut base = if partial.is_empty() {
-        std::env::current_dir().ok()
-    } else {
-        let partial_path = PathBuf::from(partial);
-        if partial.ends_with(std::path::MAIN_SEPARATOR)
-            || partial.ends_with('/')
-            || partial.ends_with('\\')
-        {
-            Some(partial_path)
-        } else {
-            partial_path.parent().map(Path::to_path_buf)
-        }
-    };
-
-    let name_prefix = if partial.is_empty()
-        || partial.ends_with(std::path::MAIN_SEPARATOR)
-        || partial.ends_with('/')
-        || partial.ends_with('\\')
-    {
-        String::new()
-    } else {
-        PathBuf::from(partial)
-            .file_name()
-            .and_then(|name| name.to_str())
-            .map(|name| name.to_string())
-            .unwrap_or_default()
-    };
-
-    if let Some(path) = base.clone() {
-        if !path.is_absolute() {
-            if let Ok(cwd) = std::env::current_dir() {
-                base = Some(cwd.join(path));
-            }
-        }
-    }
-
-    let Some(base_dir) = base else {
-        return Vec::new();
-    };
-    if !base_dir.exists() || !base_dir.is_dir() {
-        return Vec::new();
-    }
-
-    let lower_prefix = name_prefix.to_lowercase();
-    let mut suggestions = match std::fs::read_dir(&base_dir) {
-        Ok(entries) => entries
-            .filter_map(Result::ok)
-            .filter_map(|entry| {
-                let path = entry.path();
-                if !path.is_dir() {
-                    return None;
-                }
-                let name = path.file_name()?.to_str()?;
-                if !lower_prefix.is_empty() && !name.to_lowercase().starts_with(&lower_prefix) {
-                    return None;
-                }
-                Some(path.to_string_lossy().into_owned())
-            })
-            .collect::<Vec<_>>(),
-        Err(_) => Vec::new(),
-    };
-    suggestions.sort();
-    suggestions
-}
-
-fn ui_state_path_for_config(config: &AppConfig) -> PathBuf {
+pub(crate) fn ui_state_path_for_config(config: &AppConfig) -> PathBuf {
     Path::new(&config.storage.db_path)
         .parent()
         .map(|dir| dir.join("ui_state.json"))
         .unwrap_or_else(|| crate::config::default_data_dir().join("ui_state.json"))
 }
 
-fn load_ui_state_from_path(path: &Path) -> Option<UiRuntimeState> {
+pub(crate) fn load_ui_state_from_path(path: &Path) -> Option<UiRuntimeState> {
     let raw = fs::read_to_string(path).ok()?;
     serde_json::from_str::<UiRuntimeState>(&raw).ok()
 }
 
-fn save_ui_state_to_path(path: &Path, state: &UiRuntimeState) -> io::Result<()> {
+pub(crate) fn save_ui_state_to_path(path: &Path, state: &UiRuntimeState) -> io::Result<()> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
     }
@@ -1951,527 +1604,45 @@ fn save_ui_state_to_path(path: &Path, state: &UiRuntimeState) -> io::Result<()> 
     fs::write(path, raw)
 }
 
+pub(crate) fn apply_saved_ui_state_with_startup_precedence(
+    app: &mut App,
+    saved_ui_state: UiRuntimeState,
+    startup_model: &str,
+    model_was_overridden: bool,
+) {
+    app.apply_ui_state(saved_ui_state);
+    if model_was_overridden {
+        app.model = startup_model.to_string();
+    }
+}
+
 pub async fn run(
     url_override: Option<String>,
     model_override: Option<String>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let config = AppConfig::load_or_create()?;
-    let ui_state_path = ui_state_path_for_config(&config);
-    let url = url_override.unwrap_or_else(|| config.ollama.url.clone());
-    let model_was_overridden = model_override.is_some();
-    let startup_model = model_override.unwrap_or_else(|| config.defaults.model.clone());
-    let mut app = App::new(url, startup_model.clone());
-    app.workspace_name = config.defaults.workspace.clone();
-    app.syntax_highlighting = config.ui.syntax_highlighting;
-    if let Some(saved_ui_state) = load_ui_state_from_path(&ui_state_path) {
-        app.apply_ui_state(saved_ui_state);
-        if model_was_overridden {
-            app.model = startup_model;
-        }
-    }
-    let input_bindings = input::InputBindings::from_config(&config.keybindings);
+    let mut runtime = runtime::startup::bootstrap(url_override, model_override).await?;
+    let mut terminal = runtime::startup::init_terminal()?;
+    let mut last_saved_ui_state =
+        runtime::startup::persist_initial_ui_state(&runtime.app, &runtime.ui_state_path);
 
-    let manager = WorkspaceManager::open(Path::new(&config.storage.db_path))?;
-    let mut session = crate::workspace::WorkspaceSession {
-        workspace_id: 0,
-        conversation_id: 0,
-        preset_id: 0,
-    };
-
-    app.refresh_workspaces(&manager)?;
-    let initial_workspace = app
-        .workspaces
-        .iter()
-        .find(|workspace| workspace.name == config.defaults.workspace)
-        .cloned()
-        .or_else(|| app.workspaces.first().cloned());
-    if let Some(workspace) = initial_workspace {
-        let next = manager.open_workspace_session(workspace.id, &config.defaults.model)?;
-        session.workspace_id = next.workspace_id;
-        session.conversation_id = next.conversation_id;
-        session.preset_id = next.preset_id;
-        app.active_workspace_id = session.workspace_id;
-        app.active_session_id = session.conversation_id;
-        load_conversation_into_app(&mut app, &manager, session.conversation_id)?;
-        app.refresh_sessions(&manager, session.workspace_id)?;
-        app.sync_active_workspace_label(session.workspace_id);
-        app.focus_active_session(session.workspace_id, session.conversation_id);
-    } else {
-        app.clear_active_workspace_state();
-    }
-
-    let client = reqwest::Client::new();
-    match ollama::models::list_models(&client, &app.url).await {
-        Ok(models) => {
-            app.connection_status = ConnectionStatus::Online;
-            if !models.is_empty() {
-                if !models.iter().any(|m| m == &app.model) {
-                    app.model = models[0].clone();
-                }
-                app.models = models;
-            }
-        }
-        Err(err) => {
-            app.connection_status = ConnectionStatus::Offline;
-            app.set_toast(ToastLevel::Error, format!("Model list unavailable: {err}"));
-        }
-    }
-    // Re-apply restored per-session context after startup model normalization.
-    // This preserves previous ctx usage when the active model resolves to a known name.
-    app.restore_session_context_snapshot_if_match();
-    refresh_model_context_window(&mut app, &client).await;
-
-    let mut stdout = io::stdout();
-    maximize_console_window();
-    snap_console_window_to_cell_grid();
-    hide_console_scrollbars();
-    sync_console_buffer_to_window(true);
-    enable_raw_mode()?;
-    execute!(stdout, EnterAlternateScreen)?;
-    maximize_console_window();
-    snap_console_window_to_cell_grid();
-    hide_console_scrollbars();
-    sync_console_buffer_to_window(true);
-    let backend = CrosstermBackend::new(stdout);
-    let mut terminal = Terminal::new(backend)?;
-    terminal.autoresize()?;
-    terminal.clear()?;
-    let _ = execute!(terminal.backend_mut(), SetCursorStyle::DefaultUserShape);
-    terminal.show_cursor()?;
-    let mut last_saved_ui_state = app.snapshot_ui_state();
-    let _ = save_ui_state_to_path(&ui_state_path, &last_saved_ui_state);
-
-    let run_result = async {
-        while !app.should_quit() {
-            app.tick();
-            let current_ui_state = app.snapshot_ui_state();
-            if current_ui_state != last_saved_ui_state {
-                let _ = save_ui_state_to_path(&ui_state_path, &current_ui_state);
-                last_saved_ui_state = current_ui_state;
-            }
-            terminal.draw(|f| tui::draw(f, &app))?;
-            if event::poll(Duration::from_millis(50))? {
-                match event::read()? {
-                    Event::Resize(_, _) => {
-                        terminal.autoresize()?;
-                        terminal.clear()?;
-                        hide_console_scrollbars();
-                    }
-                    Event::Key(key) => {
-                    let action =
-                        input::resolve_key_event_with_bindings(key, &input_bindings, &app.input);
-
-                    if app.show_help {
-                        match action {
-                            input::InputAction::ToggleHelp | input::InputAction::DismissOverlay => {
-                                app.show_help = false;
-                            }
-                            input::InputAction::Quit => app.request_quit(),
-                            _ => {}
-                        }
-                        continue;
-                    }
-
-                    if app.pending_workspace_delete.is_some() {
-                        match action {
-                            input::InputAction::Quit => app.request_quit(),
-                            input::InputAction::DismissOverlay => {
-                                app.pending_workspace_delete = None;
-                                app.set_toast(ToastLevel::Info, "Workspace delete canceled");
-                            }
-                            input::InputAction::NewLine | input::InputAction::Send => {
-                                if let Err(err) = confirm_pending_workspace_delete(
-                                    &mut app,
-                                    &manager,
-                                    &mut session,
-                                    &config.defaults.model,
-                                ) {
-                                    app.push_system(format!("Workspace delete failed: {err}"));
-                                    app.set_toast(ToastLevel::Error, "Workspace delete failed");
-                                }
-                            }
-                            _ => {}
-                        }
-                        continue;
-                    }
-
-                    if app.pending_session_delete.is_some() {
-                        match action {
-                            input::InputAction::Quit => app.request_quit(),
-                            input::InputAction::DismissOverlay => {
-                                app.pending_session_delete = None;
-                                app.set_toast(ToastLevel::Info, "Session delete canceled");
-                            }
-                            input::InputAction::NewLine | input::InputAction::Send => {
-                                if let Err(err) =
-                                    confirm_pending_session_delete(&mut app, &manager, &mut session)
-                                {
-                                    app.push_system(format!("Session delete failed: {err}"));
-                                    app.set_toast(ToastLevel::Error, "Session delete failed");
-                                }
-                            }
-                            _ => {}
-                        }
-                        continue;
-                    }
-
-                    if app.theme_picker.is_some() {
-                        match action {
-                            input::InputAction::Quit => app.request_quit(),
-                            input::InputAction::DismissOverlay => app.theme_picker_cancel(),
-                            input::InputAction::NewLine | input::InputAction::Send => {
-                                app.theme_picker_confirm()
-                            }
-                            input::InputAction::ScrollUp(_) => app.theme_picker_prev(),
-                            input::InputAction::ScrollDown(_) => app.theme_picker_next(),
-                            _ => {}
-                        }
-                        continue;
-                    }
-
-                    match action {
-                        input::InputAction::Quit => app.request_quit(),
-                        input::InputAction::ToggleHelp => app.toggle_help(),
-                        input::InputAction::DismissOverlay => {
-                            if app.is_slash_command_input() && !app.input.trim().is_empty() {
-                                app.input.clear();
-                                app.clear_input_editor_state();
-                                app.reset_command_selection();
-                            } else {
-                                app.dismiss_overlay();
-                            }
-                        }
-                        input::InputAction::SwitchFocus => app.switch_focus(),
-                        input::InputAction::AutoCompleteCommand => {
-                            if app.focus == FocusPane::Chat || app.is_slash_command_input() {
-                                app.autocomplete_command();
-                            }
-                        }
-                        input::InputAction::ScrollUp(amount) => {
-                            if app.is_command_suggestion_mode() {
-                                app.autocomplete_command_prev();
-                            } else if app.focus == FocusPane::Workspaces {
-                                app.sidebar_up(amount);
-                            } else if app.focus == FocusPane::Chat && amount == 1 {
-                                app.move_input_cursor_up();
-                            } else {
-                                app.scroll_up(amount);
-                            }
-                        }
-                        input::InputAction::ScrollDown(amount) => {
-                            if app.is_command_suggestion_mode() {
-                                app.autocomplete_command_next();
-                            } else if app.focus == FocusPane::Workspaces {
-                                app.sidebar_down(amount);
-                            } else if app.focus == FocusPane::Chat && amount == 1 {
-                                app.move_input_cursor_down();
-                            } else {
-                                app.scroll_down(amount);
-                            }
-                        }
-                        input::InputAction::MoveCursorLeft => {
-                            if app.focus == FocusPane::Chat
-                                || (app.focus == FocusPane::Workspaces
-                                    && app.is_slash_command_input())
-                            {
-                                app.move_input_cursor_left();
-                            }
-                        }
-                        input::InputAction::MoveCursorRight => {
-                            if app.focus == FocusPane::Chat
-                                || (app.focus == FocusPane::Workspaces
-                                    && app.is_slash_command_input())
-                            {
-                                app.move_input_cursor_right();
-                            }
-                        }
-                        input::InputAction::Insert(c) => {
-                            if app.focus == FocusPane::Chat {
-                                app.insert_input_char(c);
-                            } else if app.focus == FocusPane::Workspaces {
-                                let can_start_command = app.input.is_empty() && c == '/';
-                                let continue_command = app.is_slash_command_input();
-                                if can_start_command || continue_command {
-                                    app.insert_input_char(c);
-                                }
-                            }
-                        }
-                        input::InputAction::Backspace => {
-                            if app.focus == FocusPane::Chat
-                                || (app.focus == FocusPane::Workspaces
-                                    && app.is_slash_command_input())
-                            {
-                                app.backspace_input_char();
-                            }
-                        }
-                        input::InputAction::NewLine => {
-                            if app.focus == FocusPane::Workspaces && app.is_slash_command_input() {
-                                if let Some(prompt) = app.take_input_for_send() {
-                                    if let Err(err) = execute_slash_command(
-                                        &mut app,
-                                        &manager,
-                                        &mut session,
-                                        &config.defaults.model,
-                                        &prompt,
-                                    )
-                                    .await
-                                    {
-                                        app.push_system(format!("Command failed: {err}"));
-                                        app.set_toast(ToastLevel::Error, "Command failed");
-                                    }
-                                    if command_may_change_model_context(&prompt) {
-                                        refresh_model_context_window(&mut app, &client).await;
-                                    }
-                                }
-                            } else if app.focus == FocusPane::Workspaces {
-                                let previous_model = app.model.clone();
-                                if let Err(err) = app.activate_sidebar_selection(
-                                    &manager,
-                                    &mut session,
-                                    &config.defaults.model,
-                                ) {
-                                    app.push_system(format!("Sidebar action failed: {err}"));
-                                    app.set_toast(ToastLevel::Error, "Sidebar action failed");
-                                }
-                                if app.model != previous_model {
-                                    refresh_model_context_window(&mut app, &client).await;
-                                }
-                            } else if app.input.trim_start().starts_with('/')
-                                && !app.input.contains('\n')
-                            {
-                                if let Some(prompt) = app.take_input_for_send() {
-                                    if let Err(err) = execute_slash_command(
-                                        &mut app,
-                                        &manager,
-                                        &mut session,
-                                        &config.defaults.model,
-                                        &prompt,
-                                    )
-                                    .await
-                                    {
-                                        app.push_system(format!("Command failed: {err}"));
-                                        app.set_toast(ToastLevel::Error, "Command failed");
-                                    }
-                                    if command_may_change_model_context(&prompt) {
-                                        refresh_model_context_window(&mut app, &client).await;
-                                    }
-                                }
-                            } else {
-                                app.insert_newline_at_cursor();
-                            }
-                        }
-                        input::InputAction::Send => {
-                            if app.focus != FocusPane::Chat && !app.is_slash_command_input() {
-                                continue;
-                            }
-                            if let Some(prompt) = app.take_input_for_send() {
-                                if prompt.starts_with('/') {
-                                    if let Err(err) = execute_slash_command(
-                                        &mut app,
-                                        &manager,
-                                        &mut session,
-                                        &config.defaults.model,
-                                        &prompt,
-                                    )
-                                    .await
-                                    {
-                                        app.push_system(format!("Command failed: {err}"));
-                                        app.set_toast(ToastLevel::Error, "Command failed");
-                                    }
-                                    if command_may_change_model_context(&prompt) {
-                                        refresh_model_context_window(&mut app, &client).await;
-                                    }
-                                    continue;
-                                }
-
-                                if !app.has_active_session() || session.conversation_id <= 0 {
-                                    app.push_system(
-                                        "No active workspace. Create one from the sidebar (+ New Workspace) or run `/workspace create ...`."
-                                            .to_string(),
-                                    );
-                                    app.set_toast(
-                                        ToastLevel::Info,
-                                        "Create or switch to a workspace first",
-                                    );
-                                    continue;
-                                }
-
-                                if app.model_context_window.is_none() {
-                                    refresh_model_context_window(&mut app, &client).await;
-                                }
-
-                                let image_count = app.pending_images.len();
-                                let images_base64 = app
-                                    .pending_images
-                                    .iter()
-                                    .map(|i| i.base64.clone())
-                                    .collect::<Vec<_>>();
-                                let images_json = if images_base64.is_empty() {
-                                    None
-                                } else {
-                                    Some(serde_json::to_string(&images_base64)?)
-                                };
-
-                                app.push_user(prompt.clone(), image_count);
-                                if let Err(err) = history::append_message_with_meta(
-                                    &manager,
-                                    session.conversation_id,
-                                    "user",
-                                    &prompt,
-                                    images_json.as_deref(),
-                                    None,
-                                ) {
-                                    app.push_system(format!("Persist failed: {err}"));
-                                    app.set_toast(ToastLevel::Error, "Failed to save user message");
-                                }
-                                let _ = terminal.draw(|f| tui::draw(f, &app));
-
-                                let mut request_messages: Vec<ChatMessage> =
-                                    app.to_ollama_messages();
-                                if !images_base64.is_empty() {
-                                    if let Some(last_user) =
-                                        request_messages.iter_mut().rev().find(|m| m.role == "user")
-                                    {
-                                        last_user.images = Some(images_base64.clone());
-                                    }
-                                }
-                                app.pending_images.clear();
-
-                                app.push_assistant(String::new(), None);
-                                let assistant_index = app.messages.len() - 1;
-                                app.status = String::from("Receiving...");
-                                app.is_loading = true;
-                                let _ = terminal.draw(|f| tui::draw(f, &app));
-                                let stream_url = app.url.clone();
-                                let stream_model = app.model.clone();
-                                let mut streamed_any = false;
-                                let mut captured_tool_calls: Vec<ChatToolCall> = Vec::new();
-                                let mut prompt_eval_count: Option<u32> = None;
-                                let mut eval_count: Option<u32> = None;
-
-                                let stream_result = ollama::chat::chat_stream(
-                                    &client,
-                                    &stream_url,
-                                    &stream_model,
-                                    &request_messages,
-                                    |chunk: &ParsedStreamChunk| {
-                                        if !chunk.content.is_empty() {
-                                            streamed_any = true;
-                                            {
-                                                let message = &mut app.messages[assistant_index];
-                                                message.content.push_str(&chunk.content);
-                                            }
-                                        }
-                                        if !chunk.tool_calls.is_empty() {
-                                            captured_tool_calls.extend(chunk.tool_calls.clone());
-                                        }
-                                        if let Some(value) = chunk.prompt_eval_count {
-                                            prompt_eval_count = Some(value);
-                                        }
-                                        if let Some(value) = chunk.eval_count {
-                                            eval_count = Some(value);
-                                        }
-                                        app.chat_scroll = AUTO_SCROLL_TARGET;
-                                        let _ = terminal.draw(|f| tui::draw(f, &app));
-                                    },
-                                )
-                                .await;
-
-                                app.is_loading = false;
-                                match stream_result {
-                                    Ok(()) => {
-                                        app.connection_status = ConnectionStatus::Online;
-                                        if !streamed_any {
-                                            app.messages[assistant_index].content =
-                                                String::from("(no response content)");
-                                        }
-                                        let tool_calls_json = if captured_tool_calls.is_empty() {
-                                            None
-                                        } else {
-                                            Some(serde_json::to_string(&captured_tool_calls)?)
-                                        };
-                                        app.messages[assistant_index].tool_calls_preview =
-                                            tool_calls_preview(&captured_tool_calls);
-
-                                        if let Err(err) = history::append_message_with_meta(
-                                            &manager,
-                                            session.conversation_id,
-                                            "assistant",
-                                            &app.messages[assistant_index].content,
-                                            None,
-                                            tool_calls_json.as_deref(),
-                                        ) {
-                                            app.push_system(format!("Persist failed: {err}"));
-                                            app.set_toast(
-                                                ToastLevel::Error,
-                                                "Failed to save assistant message",
-                                            );
-                                        }
-
-                                        if let Some(tokens) = prompt_eval_count {
-                                            app.prompt_tokens_used = Some(tokens);
-                                            app.peak_prompt_tokens = app.peak_prompt_tokens.max(tokens);
-                                            app.persist_active_session_context_snapshot();
-                                        }
-                                        if let Some(tokens) = eval_count {
-                                            app.last_completion_tokens = Some(tokens);
-                                            app.persist_active_session_context_snapshot();
-                                        }
-
-                                        if !captured_tool_calls.is_empty() {
-                                            let tool_summary =
-                                                format_tool_calls(&captured_tool_calls);
-                                            app.push_tool(
-                                                tool_summary.clone(),
-                                                tool_calls_preview(&captured_tool_calls),
-                                            );
-                                            let tool_calls_json =
-                                                serde_json::to_string(&captured_tool_calls)?;
-                                            let _ = history::append_message_with_meta(
-                                                &manager,
-                                                session.conversation_id,
-                                                "tool",
-                                                &tool_summary,
-                                                None,
-                                                Some(&tool_calls_json),
-                                            );
-                                        }
-
-                                        app.status = String::from("Ready");
-                                    }
-                                    Err(err) => {
-                                        app.connection_status = ConnectionStatus::Offline;
-                                        app.messages[assistant_index].content =
-                                            String::from("(request failed)");
-                                        app.push_system(format!("Request failed: {err}"));
-                                        app.set_toast(ToastLevel::Error, "Request failed");
-                                        app.status = String::from("Error");
-                                    }
-                                }
-                            }
-                        }
-                        input::InputAction::Noop => {}
-                    }
-                    }
-                    _ => {}
-                }
-            }
-        }
-        Ok::<(), Box<dyn std::error::Error>>(())
-    }
+    let run_result = runtime::event_loop::run(
+        &mut runtime.app,
+        &runtime.manager,
+        &mut runtime.session,
+        &runtime.config.defaults.model,
+        &runtime.client,
+        &runtime.input_bindings,
+        &mut terminal,
+        &runtime.ui_state_path,
+        &mut last_saved_ui_state,
+    )
     .await;
 
-    let ui_state = app.snapshot_ui_state();
-    disable_raw_mode()?;
-    let _ = execute!(terminal.backend_mut(), SetCursorStyle::DefaultUserShape);
-    execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
-    terminal.show_cursor()?;
-    let _ = save_ui_state_to_path(&ui_state_path, &ui_state);
+    runtime::shutdown::teardown_terminal(&mut terminal, &runtime.app, &runtime.ui_state_path)?;
 
     run_result
 }
-
-fn load_conversation_into_app(
+pub(crate) fn load_conversation_into_app(
     app: &mut App,
     manager: &WorkspaceManager,
     conversation_id: i64,
@@ -2499,7 +1670,7 @@ fn load_conversation_into_app(
     Ok(())
 }
 
-fn command_may_change_model_context(prompt: &str) -> bool {
+pub(crate) fn command_may_change_model_context(prompt: &str) -> bool {
     let trimmed = prompt.trim_start();
     trimmed == "/model"
         || trimmed.starts_with("/model ")
@@ -2509,7 +1680,7 @@ fn command_may_change_model_context(prompt: &str) -> bool {
         || trimmed.starts_with("/url ")
 }
 
-async fn refresh_model_context_window(app: &mut App, client: &reqwest::Client) {
+pub(crate) async fn refresh_model_context_window(app: &mut App, client: &reqwest::Client) {
     if let Ok(Some(window)) =
         ollama::models::model_context_window(client, &app.url, &app.model).await
     {
@@ -2518,7 +1689,7 @@ async fn refresh_model_context_window(app: &mut App, client: &reqwest::Client) {
     app.persist_active_session_context_snapshot();
 }
 
-async fn execute_slash_command(
+pub(crate) async fn execute_slash_command(
     app: &mut App,
     manager: &WorkspaceManager,
     session: &mut crate::workspace::WorkspaceSession,
@@ -2637,7 +1808,7 @@ async fn execute_slash_command(
     Ok(())
 }
 
-fn confirm_pending_workspace_delete(
+pub(crate) fn confirm_pending_workspace_delete(
     app: &mut App,
     manager: &WorkspaceManager,
     session: &mut crate::workspace::WorkspaceSession,
@@ -2695,7 +1866,7 @@ fn confirm_pending_workspace_delete(
     Ok(())
 }
 
-fn confirm_pending_session_delete(
+pub(crate) fn confirm_pending_session_delete(
     app: &mut App,
     manager: &WorkspaceManager,
     session: &mut crate::workspace::WorkspaceSession,
@@ -2751,7 +1922,7 @@ fn confirm_pending_session_delete(
     Ok(())
 }
 
-fn workspace_help_text() -> String {
+pub(crate) fn workspace_help_text() -> String {
     [
         "Workspace commands:",
         "- /workspace list",
@@ -2771,7 +1942,7 @@ fn workspace_help_text() -> String {
     .join("\n")
 }
 
-fn models_help_text() -> String {
+pub(crate) fn models_help_text() -> String {
     [
         "Model commands:",
         "- /models",
@@ -2783,7 +1954,7 @@ fn models_help_text() -> String {
     .join("\n")
 }
 
-fn session_help_text() -> String {
+pub(crate) fn session_help_text() -> String {
     [
         "Session commands:",
         "- /session list",
@@ -2799,14 +1970,14 @@ fn session_help_text() -> String {
     .join("\n")
 }
 
-fn starts_with_ignore_ascii_case(value: &str, prefix: &str) -> bool {
+pub(crate) fn starts_with_ignore_ascii_case(value: &str, prefix: &str) -> bool {
     value
         .get(..prefix.len())
         .map(|chunk| chunk.eq_ignore_ascii_case(prefix))
         .unwrap_or(false)
 }
 
-fn unquote_command_value(raw: &str) -> String {
+pub(crate) fn unquote_command_value(raw: &str) -> String {
     let trimmed = raw.trim();
     if trimmed.len() >= 2 {
         let first = trimmed.as_bytes()[0];
@@ -2818,7 +1989,7 @@ fn unquote_command_value(raw: &str) -> String {
     trimmed.to_string()
 }
 
-fn next_workspace_name(existing: &[crate::workspace::Workspace], base: &str) -> String {
+pub(crate) fn next_workspace_name(existing: &[crate::workspace::Workspace], base: &str) -> String {
     if !existing
         .iter()
         .any(|workspace| workspace.name.eq_ignore_ascii_case(base))
@@ -2869,908 +2040,55 @@ fn handle_command(
     default_model: &str,
     prompt: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let parts = prompt.split_whitespace().collect::<Vec<_>>();
-    if parts.is_empty() {
+    let parsed = commands::parse_command(prompt);
+    if parsed.is_empty() {
         return Ok(());
     }
 
-    match parts[0] {
-        "/commands" => {
-            app.push_system(format!("Commands: {}", COMMAND_SUGGESTIONS.join(", ")));
-        }
-        "/models" => {
-            if parts.len() > 1 {
-                app.push_system(models_help_text());
+    let parts = parsed.parts();
+    let route = commands::route_command(parts[0]);
+
+    if commands::handlers::utility::handle(app, route, parts)? {
+        return Ok(());
+    }
+    if commands::handlers::models::handle(app, manager, route, parts)? {
+        return Ok(());
+    }
+    if commands::handlers::misc::handle(app, manager, session, route, parts)? {
+        return Ok(());
+    }
+
+    match route {
+        commands::CommandRoute::Workspace => {
+            if commands::handlers::workspace::handle(
+                app,
+                manager,
+                session,
+                default_model,
+                prompt,
+                parts,
+            )? {
                 return Ok(());
             }
-            if app.models.is_empty() {
-                app.push_system(format!("No models cached yet.\n\n{}", models_help_text()));
-            } else {
-                let lines = app
-                    .models
-                    .iter()
-                    .map(|model| {
-                        if model == &app.model {
-                            format!("* {model} (active)")
-                        } else {
-                            format!("- {model}")
-                        }
-                    })
-                    .collect::<Vec<_>>()
-                    .join("\n");
-                app.push_system(format!("Loaded models:\n{lines}\n\n{}", models_help_text()));
-            }
         }
-        "/search" => {
-            let query = parts.get(1..).map(|v| v.join(" ")).unwrap_or_default();
-            if query.trim().is_empty() {
-                app.push_system("Usage: /search <query>".to_string());
-            } else {
-                let hits = manager.search_messages(&query)?;
-                if hits.is_empty() {
-                    app.push_system("No matches found.".to_string());
-                } else {
-                    let preview = hits
-                        .into_iter()
-                        .take(8)
-                        .map(|h| format!("#{} {}: {}", h.conversation_id, h.role, h.content))
-                        .collect::<Vec<_>>()
-                        .join("\n");
-                    app.push_system(format!("Search results:\n{preview}"));
-                }
-            }
-        }
-        "/export" => {
-            if !app.has_active_session() || session.conversation_id <= 0 {
-                app.push_system(
-                    "No active session to export. Create or switch to a workspace first."
-                        .to_string(),
-                );
+        commands::CommandRoute::Session => {
+            if commands::handlers::session::handle(app, manager, session, prompt, parts)? {
                 return Ok(());
             }
-            if parts.len() < 3 {
-                app.push_system("Usage: /export <json|md> <path>".to_string());
-            } else {
-                let format = parts[1];
-                let path = PathBuf::from(unquote_command_value(&parts[2..].join(" ")));
-                match format {
-                    "json" => manager.export_conversation_json(session.conversation_id, &path)?,
-                    "md" | "markdown" => {
-                        manager.export_conversation_markdown(session.conversation_id, &path)?
-                    }
-                    _ => {
-                        app.push_system("Unknown export format. Use json or md.".to_string());
-                        return Ok(());
-                    }
-                }
-                app.set_toast(
-                    ToastLevel::Success,
-                    format!("Conversation exported to {}", path.display()),
-                );
-            }
         }
-        "/workspaces" => {
-            app.push_system("Use `/workspace list`.".to_string());
+        commands::CommandRoute::Unknown => {
+            app.push_system("Unknown command. Use /commands".to_string());
+            return Ok(());
         }
-        "/workspace" => {
-            if parts.len() < 2 {
-                app.push_system(workspace_help_text());
-            } else {
-                let sub = parts[1];
-                match sub {
-                    "list" => {
-                        let workspaces = manager.list_workspaces()?;
-                        if workspaces.is_empty() {
-                            app.push_system("No workspaces found.".to_string());
-                        } else {
-                            let list = workspaces
-                                .into_iter()
-                                .map(|workspace| {
-                                    let path_label =
-                                        workspace.root_path.as_deref().unwrap_or("(path not set)");
-                                    if workspace.id == session.workspace_id {
-                                        format!(
-                                            "* {} (id: {}, active, path: {})",
-                                            workspace.name, workspace.id, path_label
-                                        )
-                                    } else {
-                                        format!(
-                                            "- {} (id: {}, path: {})",
-                                            workspace.name, workspace.id, path_label
-                                        )
-                                    }
-                                })
-                                .collect::<Vec<_>>()
-                                .join("\n");
-                            app.push_system(format!(
-                                "Workspaces:\n{list}\n\nUse `/workspace switch <id|name>` or `/workspace where`."
-                            ));
-                        }
-                    }
-                    "switch" => {
-                        if parts.len() < 3 {
-                            app.push_system("Usage: /workspace switch <id|name>".to_string());
-                            return Ok(());
-                        }
-                        let selector = parts[2..].join(" ");
-                        let workspaces = manager.list_workspaces()?;
-                        let target = if let Ok(id) = selector.parse::<i64>() {
-                            workspaces.into_iter().find(|w| w.id == id)
-                        } else {
-                            workspaces
-                                .into_iter()
-                                .find(|w| w.name.eq_ignore_ascii_case(&selector))
-                        };
-                        if let Some(workspace) = target {
-                            let next =
-                                manager.open_workspace_session(workspace.id, default_model)?;
-                            session.workspace_id = next.workspace_id;
-                            session.conversation_id = next.conversation_id;
-                            session.preset_id = next.preset_id;
-                            app.active_workspace_id = session.workspace_id;
-                            app.active_session_id = session.conversation_id;
-                            app.workspace_name = workspace.name;
-                            app.workspace_root_path = workspace.root_path;
-                            load_conversation_into_app(app, manager, session.conversation_id)?;
-                            app.focus_active_session(session.workspace_id, session.conversation_id);
-                            app.set_toast(ToastLevel::Success, "Workspace switched");
-                        } else {
-                            app.push_system(format!(
-                                "Workspace not found: {selector}. Use `/workspace list`."
-                            ));
-                        }
-                    }
-                    "create" => {
-                        let raw_create = prompt
-                            .strip_prefix("/workspace create")
-                            .map(str::trim)
-                            .unwrap_or_default();
-                        if raw_create.is_empty() {
-                            app.push_system(
-                                "Usage: /workspace create <name> --path <folder>\n   or: /workspace create --path <folder>"
-                                    .to_string(),
-                            );
-                            return Ok(());
-                        }
-
-                        let (name_part, root_path_raw) =
-                            if let Some(path_only) = raw_create.strip_prefix("--path ") {
-                                ("", Some(path_only.trim()))
-                            } else if let Some((left, right)) = raw_create.split_once(" --path ") {
-                                (left.trim(), Some(right.trim()))
-                            } else {
-                                (raw_create, None)
-                            };
-
-                        let explicit_path = root_path_raw.is_some();
-                        let root_path = if let Some(path_raw) = root_path_raw {
-                            let normalized_path = unquote_command_value(path_raw);
-                            if normalized_path.is_empty() {
-                                app.push_system(
-                                    "Workspace path cannot be empty after `--path`.".to_string(),
-                                );
-                                return Ok(());
-                            }
-                            PathBuf::from(normalized_path)
-                        } else {
-                            std::env::current_dir()?
-                        };
-
-                        let existing_workspaces = manager.list_workspaces()?;
-                        let mut name = unquote_command_value(name_part);
-                        if name.is_empty() {
-                            name = next_workspace_name(&existing_workspaces, "New Workspace");
-                        }
-                        if name.is_empty() {
-                            app.push_system("Workspace name cannot be empty.".to_string());
-                            return Ok(());
-                        }
-                        let existing = existing_workspaces
-                            .into_iter()
-                            .find(|w| w.name.eq_ignore_ascii_case(&name));
-                        if existing.is_some() {
-                            app.push_system(format!(
-                                "Workspace `{name}` already exists. Use `/workspace switch {name}`."
-                            ));
-                            return Ok(());
-                        }
-                        let created =
-                            manager.create_workspace(&name, default_model, Some(&root_path))?;
-                        session.workspace_id = created.workspace_id;
-                        session.conversation_id = created.conversation_id;
-                        session.preset_id = created.preset_id;
-                        app.active_workspace_id = session.workspace_id;
-                        app.active_session_id = session.conversation_id;
-                        app.workspace_name = name.clone();
-                        app.workspace_root_path = Some(root_path.to_string_lossy().into_owned());
-                        load_conversation_into_app(app, manager, session.conversation_id)?;
-                        app.focus_active_session(session.workspace_id, session.conversation_id);
-                        app.refresh_workspaces(manager)?;
-                        app.refresh_sessions(manager, session.workspace_id)?;
-                        if !explicit_path {
-                            app.push_system(format!(
-                                "No `--path` provided, using current directory: {}",
-                                root_path.display()
-                            ));
-                        }
-                        app.set_toast(ToastLevel::Success, format!("Workspace `{name}` created"));
-                    }
-                    "rename" => {
-                        let new_name_raw = prompt
-                            .strip_prefix("/workspace rename")
-                            .map(str::trim)
-                            .unwrap_or_default();
-                        let new_name = new_name_raw
-                            .strip_prefix("--to")
-                            .map(str::trim)
-                            .unwrap_or(new_name_raw)
-                            .trim();
-                        if new_name.is_empty() {
-                            app.push_system(
-                                "Usage: /workspace rename <new name>\nRenames selected workspace in sidebar, otherwise active workspace."
-                                    .to_string(),
-                            );
-                            return Ok(());
-                        }
-
-                        let workspaces = manager.list_workspaces()?;
-                        if workspaces.is_empty() {
-                            app.push_system(
-                                "No workspaces found. Create one with `/workspace create --path <folder>`."
-                                    .to_string(),
-                            );
-                            return Ok(());
-                        }
-
-                        let selected_workspace_id = match app.sidebar_item() {
-                            Some(SidebarItem::Workspace(index))
-                            | Some(SidebarItem::WorkspaceSessionsLabel(index))
-                            | Some(SidebarItem::WorkspaceSession(index, _)) => {
-                                app.workspaces.get(index).map(|workspace| workspace.id)
-                            }
-                            _ => (session.workspace_id > 0).then_some(session.workspace_id),
-                        };
-                        let target = selected_workspace_id
-                            .and_then(|id| workspaces.iter().find(|workspace| workspace.id == id))
-                            .cloned();
-                        let Some(target_workspace) = target else {
-                            app.push_system(
-                                "No workspace selected. Select one in sidebar, then run `/workspace rename <new name>`."
-                                    .to_string(),
-                            );
-                            return Ok(());
-                        };
-
-                        if target_workspace.name.eq_ignore_ascii_case(new_name) {
-                            app.set_toast(ToastLevel::Info, "Workspace name unchanged");
-                            return Ok(());
-                        }
-
-                        if workspaces.iter().any(|workspace| {
-                            workspace.id != target_workspace.id
-                                && workspace.name.eq_ignore_ascii_case(new_name)
-                        }) {
-                            app.push_system(format!(
-                                "Workspace `{new_name}` already exists. Choose another name."
-                            ));
-                            return Ok(());
-                        }
-
-                        manager.rename_workspace(target_workspace.id, new_name)?;
-                        if target_workspace.id == session.workspace_id {
-                            app.workspace_name = new_name.to_string();
-                        }
-                        app.refresh_workspaces(manager)?;
-                        app.sync_active_workspace_label(session.workspace_id);
-                        app.set_toast(
-                            ToastLevel::Success,
-                            format!(
-                                "Workspace renamed: {} -> {}",
-                                target_workspace.name, new_name
-                            ),
-                        );
-                    }
-                    "delete" => {
-                        let delete_args = parts.get(2..).unwrap_or(&[]);
-                        if matches!(delete_args.first(), Some(&"--cancel")) {
-                            if app.pending_workspace_delete.take().is_some() {
-                                app.set_toast(ToastLevel::Info, "Workspace delete canceled");
-                            } else {
-                                app.push_system("No pending workspace delete.".to_string());
-                            }
-                            return Ok(());
-                        }
-                        if matches!(delete_args.first(), Some(&"--confirm")) {
-                            return confirm_pending_workspace_delete(
-                                app,
-                                manager,
-                                session,
-                                default_model,
-                            );
-                        }
-
-                        let workspaces = manager.list_workspaces()?;
-                        if workspaces.is_empty() {
-                            app.push_system(
-                                "No workspaces to delete. Create one from the sidebar (+ New Workspace)."
-                                    .to_string(),
-                            );
-                            return Ok(());
-                        }
-
-                        let target = if delete_args.is_empty() {
-                            let selected_workspace_id = match app.sidebar_item() {
-                                Some(SidebarItem::Workspace(index))
-                                | Some(SidebarItem::WorkspaceSessionsLabel(index))
-                                | Some(SidebarItem::WorkspaceSession(index, _)) => {
-                                    app.workspaces.get(index).map(|workspace| workspace.id)
-                                }
-                                _ => Some(session.workspace_id),
-                            };
-                            selected_workspace_id
-                                .and_then(|id| workspaces.iter().find(|w| w.id == id).cloned())
-                        } else {
-                            let selector = delete_args.join(" ");
-                            if let Ok(id) = selector.trim().parse::<i64>() {
-                                workspaces.iter().find(|w| w.id == id).cloned()
-                            } else {
-                                workspaces
-                                    .iter()
-                                    .find(|w| w.name.eq_ignore_ascii_case(selector.trim()))
-                                    .cloned()
-                            }
-                        };
-                        let Some(target_workspace) = target else {
-                            app.push_system(
-                                "Workspace not found for delete selection.".to_string(),
-                            );
-                            return Ok(());
-                        };
-
-                        app.pending_session_delete = None;
-                        app.pending_workspace_delete = Some(PendingWorkspaceDelete {
-                            id: target_workspace.id,
-                            name: target_workspace.name.clone(),
-                            expires_at: Instant::now() + Duration::from_secs(45),
-                        });
-                        app.set_toast(
-                            ToastLevel::Info,
-                            "Delete modal opened (Enter confirm, Esc cancel)",
-                        );
-                    }
-                    "where" => {
-                        if session.workspace_id <= 0 || app.active_workspace_id <= 0 {
-                            app.push_system(
-                                "No active workspace. Create one from the sidebar (+ New Workspace)."
-                                    .to_string(),
-                            );
-                            return Ok(());
-                        }
-                        let path = app
-                            .workspace_root_path
-                            .as_deref()
-                            .unwrap_or("(path not set)");
-                        app.push_system(format!(
-                            "Active workspace: {} (id: {})\nPath: {}",
-                            app.workspace_name, session.workspace_id, path
-                        ));
-                    }
-                    "set-path" => {
-                        let raw_set = prompt
-                            .strip_prefix("/workspace set-path")
-                            .map(str::trim)
-                            .unwrap_or_default();
-                        if raw_set.is_empty() {
-                            app.push_system(
-                                "Usage: /workspace set-path <id|name> --path <folder>".to_string(),
-                            );
-                            return Ok(());
-                        }
-                        let Some((selector_raw, path_raw)) = raw_set.split_once(" --path ") else {
-                            app.push_system(
-                                "Usage: /workspace set-path <id|name> --path <folder>".to_string(),
-                            );
-                            return Ok(());
-                        };
-
-                        let selector = selector_raw.trim();
-                        let selector = unquote_command_value(selector);
-                        let path_value = unquote_command_value(path_raw.trim());
-                        if selector.is_empty() || path_value.is_empty() {
-                            app.push_system(
-                                "Usage: /workspace set-path <id|name> --path <folder>".to_string(),
-                            );
-                            return Ok(());
-                        }
-
-                        let workspaces = manager.list_workspaces()?;
-                        let target = if let Ok(id) = selector.parse::<i64>() {
-                            workspaces.into_iter().find(|w| w.id == id)
-                        } else {
-                            workspaces
-                                .into_iter()
-                                .find(|w| w.name.eq_ignore_ascii_case(&selector))
-                        };
-                        let Some(workspace) = target else {
-                            app.push_system(format!(
-                                "Workspace not found: {}. Use `/workspace list`.",
-                                selector
-                            ));
-                            return Ok(());
-                        };
-
-                        let normalized = manager
-                            .set_workspace_root_path(workspace.id, &PathBuf::from(path_value))?;
-                        if workspace.id == session.workspace_id {
-                            app.workspace_root_path = Some(normalized.clone());
-                        }
-                        app.set_toast(
-                            ToastLevel::Success,
-                            format!("Workspace path updated: {normalized}"),
-                        );
-                    }
-                    "export" => {
-                        if parts.len() < 3 {
-                            app.push_system("Usage: /workspace export <path>".to_string());
-                            return Ok(());
-                        }
-                        let path = PathBuf::from(parts[2..].join(" "));
-                        manager.export_workspace_json(session.workspace_id, &path)?;
-                        app.set_toast(
-                            ToastLevel::Success,
-                            format!("Workspace exported to {}", path.display()),
-                        );
-                    }
-                    "import" => {
-                        if parts.len() < 3 {
-                            app.push_system("Usage: /workspace import <path>".to_string());
-                            return Ok(());
-                        }
-                        let path = PathBuf::from(parts[2..].join(" "));
-                        let imported = manager.import_workspace_json(&path, default_model)?;
-                        session.workspace_id = imported.workspace_id;
-                        session.conversation_id = imported.conversation_id;
-                        session.preset_id = imported.preset_id;
-                        app.active_workspace_id = session.workspace_id;
-                        app.active_session_id = session.conversation_id;
-                        if let Some(workspace) = manager
-                            .list_workspaces()?
-                            .into_iter()
-                            .find(|w| w.id == session.workspace_id)
-                        {
-                            app.workspace_name = workspace.name;
-                            app.workspace_root_path = workspace.root_path;
-                        }
-                        load_conversation_into_app(app, manager, session.conversation_id)?;
-                        app.focus_active_session(session.workspace_id, session.conversation_id);
-                        app.set_toast(
-                            ToastLevel::Success,
-                            format!("Workspace imported from {}", path.display()),
-                        );
-                    }
-                    _ => app.push_system(workspace_help_text()),
-                }
-            }
+        _ => {
+            app.push_system("Unknown command. Use /commands".to_string());
+            return Ok(());
         }
-        "/session" => {
-            if session.workspace_id <= 0 {
-                app.push_system(
-                    "No active workspace. Create one from the sidebar (+ New Workspace) or run `/workspace create ...`."
-                        .to_string(),
-                );
-                return Ok(());
-            }
-            if parts.len() < 2 {
-                app.push_system(session_help_text());
-            } else {
-                match parts[1] {
-                    "list" => {
-                        let sessions = manager.list_conversations(session.workspace_id)?;
-                        if sessions.is_empty() {
-                            app.push_system("No sessions found in this workspace.".to_string());
-                        } else {
-                            let list = sessions
-                                .into_iter()
-                                .map(|conversation| {
-                                    let title = conversation
-                                        .title
-                                        .unwrap_or_else(|| format!("Session {}", conversation.id));
-                                    if conversation.id == session.conversation_id {
-                                        format!("* {} (id: {}, active)", title, conversation.id)
-                                    } else {
-                                        format!("- {} (id: {})", title, conversation.id)
-                                    }
-                                })
-                                .collect::<Vec<_>>()
-                                .join("\n");
-                            app.push_system(format!(
-                                "Sessions in {}:\n{}\n\nUse `/session new <title>`, `/session switch <id|title>`, `/session rename ...`, or `/session delete`.",
-                                app.workspace_name, list
-                            ));
-                        }
-                    }
-                    "new" | "create" => {
-                        let raw_title = parts.get(2..).map(|v| v.join(" ")).unwrap_or_else(|| {
-                            format!("Session {}", chrono::Local::now().format("%H:%M"))
-                        });
-                        let normalized_title = raw_title.trim().to_string();
-                        let title_arg = if normalized_title.is_empty() {
-                            format!("Session {}", chrono::Local::now().format("%H:%M"))
-                        } else {
-                            normalized_title
-                        };
-                        let conversation_id =
-                            manager.create_session(session.workspace_id, Some(&title_arg))?;
-                        session.conversation_id = conversation_id;
-                        app.active_session_id = conversation_id;
-                        load_conversation_into_app(app, manager, session.conversation_id)?;
-                        app.set_toast(ToastLevel::Success, "New session created");
-                    }
-                    "switch" => {
-                        if parts.len() < 3 {
-                            app.push_system("Usage: /session switch <id|title>".to_string());
-                            return Ok(());
-                        }
-                        let selector = parts[2..].join(" ");
-                        let sessions = manager.list_conversations(session.workspace_id)?;
-                        let target = if let Ok(id) = selector.trim().parse::<i64>() {
-                            sessions.into_iter().find(|c| c.id == id)
-                        } else {
-                            sessions.into_iter().find(|c| {
-                                c.title
-                                    .as_deref()
-                                    .map(|t| t.eq_ignore_ascii_case(selector.trim()))
-                                    .unwrap_or(false)
-                            })
-                        };
-                        if let Some(target_session) = target {
-                            session.conversation_id = target_session.id;
-                            app.active_session_id = target_session.id;
-                            load_conversation_into_app(app, manager, session.conversation_id)?;
-                            app.set_toast(ToastLevel::Success, "Session switched");
-                        } else {
-                            app.push_system(format!(
-                                "Session not found: {}. Use `/session list`.",
-                                selector.trim()
-                            ));
-                        }
-                    }
-                    "delete" => {
-                        let (target_workspace_id, target, explicit_selector) = if parts.len() >= 3 {
-                            let selector = parts[2..].join(" ");
-                            let sessions = manager.list_conversations(session.workspace_id)?;
-                            let target = if let Ok(id) = selector.trim().parse::<i64>() {
-                                sessions.into_iter().find(|entry| entry.id == id)
-                            } else {
-                                sessions.into_iter().find(|entry| {
-                                    entry
-                                        .title
-                                        .as_deref()
-                                        .map(|title| title.eq_ignore_ascii_case(selector.trim()))
-                                        .unwrap_or(false)
-                                })
-                            };
-                            (
-                                session.workspace_id,
-                                target,
-                                Some(selector.trim().to_string()),
-                            )
-                        } else {
-                            let selected_workspace_and_session = match app.sidebar_item() {
-                                Some(SidebarItem::WorkspaceSession(
-                                    workspace_index,
-                                    session_index,
-                                )) => app.workspaces.get(workspace_index).and_then(|workspace| {
-                                    workspace
-                                        .sessions
-                                        .get(session_index)
-                                        .map(|entry| (workspace.id, entry.id))
-                                }),
-                                _ => None,
-                            };
-                            let selected_or_active = selected_workspace_and_session.or_else(|| {
-                                (session.workspace_id > 0 && app.active_session_id > 0)
-                                    .then_some((session.workspace_id, app.active_session_id))
-                            });
-                            let Some((workspace_id, session_id)) = selected_or_active else {
-                                app.push_system(
-                                    "No session selected. Select a session in sidebar, then run `/session delete`."
-                                        .to_string(),
-                                );
-                                return Ok(());
-                            };
-                            let sessions = manager.list_conversations(workspace_id)?;
-                            (
-                                workspace_id,
-                                sessions.into_iter().find(|entry| entry.id == session_id),
-                                None,
-                            )
-                        };
-                        let Some(target_session) = target else {
-                            if let Some(selector) = explicit_selector {
-                                app.push_system(format!(
-                                    "Session not found: {selector}. Use `/session list`."
-                                ));
-                            } else {
-                                app.push_system(
-                                    "Selected session was not found. Select a session in sidebar, then run `/session delete`."
-                                        .to_string(),
-                                );
-                            }
-                            return Ok(());
-                        };
-                        app.pending_workspace_delete = None;
-                        app.pending_session_delete = Some(PendingSessionDelete {
-                            workspace_id: target_workspace_id,
-                            id: target_session.id,
-                            name: target_session
-                                .title
-                                .clone()
-                                .unwrap_or_else(|| format!("Session {}", target_session.id)),
-                            expires_at: Instant::now() + Duration::from_secs(45),
-                        });
-                        app.set_toast(
-                            ToastLevel::Info,
-                            "Delete modal opened (Enter confirm, Esc cancel)",
-                        );
-                    }
-                    "rename" => {
-                        let raw_args = prompt
-                            .strip_prefix("/session rename")
-                            .map(str::trim)
-                            .unwrap_or_default();
-                        if raw_args.is_empty() {
-                            app.push_system(
-                                "Usage: /session rename <id> <new title>\n   or: /session rename <title> --to <new title>"
-                                    .to_string(),
-                            );
-                            return Ok(());
-                        }
-
-                        let sessions = manager.list_conversations(session.workspace_id)?;
-                        if sessions.is_empty() {
-                            app.push_system("No sessions found in this workspace.".to_string());
-                            return Ok(());
-                        }
-
-                        let (selector, new_title) = if let Some((left, right)) =
-                            raw_args.split_once(" --to ")
-                        {
-                            (
-                                unquote_command_value(left.trim()),
-                                unquote_command_value(right.trim()),
-                            )
-                        } else if let Some(index) = raw_args.find(char::is_whitespace) {
-                            let first = raw_args[..index].trim();
-                            let rest = raw_args[index..].trim();
-                            if first.parse::<i64>().is_ok() && !rest.is_empty() {
-                                (first.to_string(), unquote_command_value(rest))
-                            } else {
-                                let mut titled_sessions = sessions
-                                    .iter()
-                                    .filter_map(|entry| {
-                                        entry.title.as_ref().map(|title| (title.as_str(), entry.id))
-                                    })
-                                    .collect::<Vec<_>>();
-                                titled_sessions
-                                    .sort_by_key(|(title, _)| std::cmp::Reverse(title.len()));
-                                let resolved = titled_sessions.into_iter().find_map(
-                                    |(title, _conversation_id)| {
-                                        if starts_with_ignore_ascii_case(raw_args, title) {
-                                            let suffix =
-                                                raw_args.get(title.len()..).unwrap_or_default();
-                                            let candidate = suffix.trim();
-                                            if !candidate.is_empty() {
-                                                return Some((
-                                                    title.to_string(),
-                                                    unquote_command_value(candidate),
-                                                ));
-                                            }
-                                        }
-                                        None
-                                    },
-                                );
-                                if let Some(pair) = resolved {
-                                    pair
-                                } else {
-                                    app.push_system(
-                                        "Usage: /session rename <id> <new title>\nFor multi-word source titles, use: /session rename <title> --to <new title>"
-                                            .to_string(),
-                                    );
-                                    return Ok(());
-                                }
-                            }
-                        } else {
-                            app.push_system(
-                                "Usage: /session rename <id> <new title>\n   or: /session rename <title> --to <new title>"
-                                    .to_string(),
-                            );
-                            return Ok(());
-                        };
-
-                        if selector.trim().is_empty() || new_title.trim().is_empty() {
-                            app.push_system(
-                                "Usage: /session rename <id> <new title>\n   or: /session rename <title> --to <new title>"
-                                    .to_string(),
-                            );
-                            return Ok(());
-                        }
-
-                        let target = if let Ok(id) = selector.trim().parse::<i64>() {
-                            sessions.iter().find(|entry| entry.id == id)
-                        } else {
-                            sessions.iter().find(|entry| {
-                                entry
-                                    .title
-                                    .as_deref()
-                                    .map(|title| title.eq_ignore_ascii_case(selector.trim()))
-                                    .unwrap_or(false)
-                            })
-                        };
-
-                        let Some(target_session) = target else {
-                            app.push_system(format!(
-                                "Session not found: {}. Use `/session list`.",
-                                selector.trim()
-                            ));
-                            return Ok(());
-                        };
-
-                        manager.rename_session(target_session.id, new_title.trim())?;
-                        if target_session.id == session.conversation_id {
-                            app.active_session_title = new_title.trim().to_string();
-                        }
-                        app.set_toast(
-                            ToastLevel::Success,
-                            format!("Session renamed to \"{}\"", new_title.trim()),
-                        );
-                    }
-                    _ => app.push_system(session_help_text()),
-                }
-            }
-        }
-        "/checkpoint" => {
-            if !app.has_active_session() || session.conversation_id <= 0 {
-                app.push_system(
-                    "No active session for checkpoints. Create or switch to a workspace first."
-                        .to_string(),
-                );
-                return Ok(());
-            }
-            if parts.len() < 3 {
-                app.push_system("Usage: /checkpoint <save|restore> <name>".to_string());
-            } else {
-                let sub = parts[1];
-                let name = parts[2..].join(" ");
-                match sub {
-                    "save" => {
-                        manager.save_checkpoint(session.conversation_id, &name)?;
-                        app.set_toast(ToastLevel::Success, format!("Checkpoint saved: {name}"));
-                    }
-                    "restore" => {
-                        let restored = manager.restore_checkpoint(
-                            session.workspace_id,
-                            session.conversation_id,
-                            &name,
-                        )?;
-                        session.conversation_id = restored;
-                        app.active_session_id = restored;
-                        load_conversation_into_app(app, manager, session.conversation_id)?;
-                        app.set_toast(
-                            ToastLevel::Success,
-                            format!("Restored checkpoint into new conversation: {name}"),
-                        );
-                    }
-                    _ => app.push_system("Unknown checkpoint subcommand.".to_string()),
-                }
-            }
-        }
-        "/attach" => {
-            let path = parts.get(1..).map(|v| v.join(" ")).unwrap_or_default();
-            if path.trim().is_empty() {
-                app.push_system("Usage: /attach <image_path>".to_string());
-            } else {
-                let pathbuf = PathBuf::from(path.clone());
-                let ext_ok = pathbuf
-                    .extension()
-                    .and_then(|e| e.to_str())
-                    .map(|e| {
-                        matches!(
-                            e.to_lowercase().as_str(),
-                            "png" | "jpg" | "jpeg" | "webp" | "gif"
-                        )
-                    })
-                    .unwrap_or(false);
-                if !ext_ok {
-                    app.push_system(
-                        "Only png/jpg/jpeg/webp/gif attachments are supported.".to_string(),
-                    );
-                    return Ok(());
-                }
-                let bytes = fs::read(&pathbuf)?;
-                let encoded = STANDARD.encode(bytes);
-                app.pending_images.push(PendingImage {
-                    path,
-                    base64: encoded,
-                });
-                app.set_toast(
-                    ToastLevel::Info,
-                    format!("Attached image ({} pending)", app.pending_images.len()),
-                );
-            }
-        }
-        "/clear-attachments" => {
-            app.pending_images.clear();
-            app.set_toast(ToastLevel::Info, "Pending attachments cleared");
-        }
-        "/model" => {
-            let model = parts.get(1..).map(|v| v.join(" ")).unwrap_or_default();
-            if model.trim().is_empty() {
-                if app.models.is_empty() {
-                    app.push_system(
-                        "Usage: /model <name>\nNo models cached yet. Try `/models refresh`."
-                            .to_string(),
-                    );
-                } else {
-                    let lines = app
-                        .models
-                        .iter()
-                        .take(20)
-                        .map(|entry| {
-                            if entry == &app.model {
-                                format!("* {entry} (active)")
-                            } else {
-                                format!("- {entry}")
-                            }
-                        })
-                        .collect::<Vec<_>>()
-                        .join("\n");
-                    app.push_system(format!(
-                        "Usage: /model <name>\nCurrent: {}\n\nKnown models:\n{}\n\nTip: `/models refresh` to reload.",
-                        app.model, lines
-                    ));
-                }
-            } else {
-                let requested = model.trim();
-                if let Some(exact) = app.models.iter().find(|entry| *entry == requested).cloned() {
-                    app.model = exact;
-                    app.set_toast(ToastLevel::Success, "Model switched");
-                } else if let Some(prefix_match) = app
-                    .models
-                    .iter()
-                    .find(|entry| entry.starts_with(requested))
-                    .cloned()
-                {
-                    app.model = prefix_match;
-                    app.set_toast(
-                        ToastLevel::Success,
-                        format!("Model switched (prefix match): {}", app.model),
-                    );
-                } else {
-                    app.model = requested.to_string();
-                    app.set_toast(
-                        ToastLevel::Info,
-                        "Model set (not in cache). Try `/models refresh` if needed.",
-                    );
-                }
-            }
-        }
-        "/url" => {
-            let url = parts.get(1..).map(|v| v.join(" ")).unwrap_or_default();
-            if url.trim().is_empty() {
-                app.push_system("Usage: /url <http://host:port>".to_string());
-            } else {
-                app.url = url;
-                app.set_toast(ToastLevel::Success, "Server URL updated for this session");
-            }
-        }
-        _ => app.push_system("Unknown command. Use /commands".to_string()),
     }
 
     Ok(())
 }
-
-fn format_tool_calls(tool_calls: &[ChatToolCall]) -> String {
+pub(crate) fn format_tool_calls(tool_calls: &[ChatToolCall]) -> String {
     if tool_calls.is_empty() {
         return String::from("Tool calls: (none)");
     }
@@ -3788,7 +2106,7 @@ fn format_tool_calls(tool_calls: &[ChatToolCall]) -> String {
         .join("\n")
 }
 
-fn tool_calls_preview(tool_calls: &[ChatToolCall]) -> Option<String> {
+pub(crate) fn tool_calls_preview(tool_calls: &[ChatToolCall]) -> Option<String> {
     if tool_calls.is_empty() {
         return None;
     }
@@ -3806,10 +2124,11 @@ fn tool_calls_preview(tool_calls: &[ChatToolCall]) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::{
-        autocomplete_suggestions, confirm_pending_session_delete, confirm_pending_workspace_delete,
-        handle_command, is_cloud_model_name, load_ui_state_from_path, next_autocomplete_value,
-        save_ui_state_to_path, App, ModelBucket, SessionContextSnapshot, SessionEntry, SidebarItem,
-        UiRuntimeState, UiTheme, WorkspaceEntry,
+        apply_saved_ui_state_with_startup_precedence, autocomplete_suggestions,
+        confirm_pending_session_delete, confirm_pending_workspace_delete, handle_command,
+        is_cloud_model_name, load_ui_state_from_path, models_help_text, next_autocomplete_value,
+        save_ui_state_to_path, session_help_text, workspace_help_text, App, FocusPane, ModelBucket,
+        SessionContextSnapshot, SessionEntry, SidebarItem, UiRuntimeState, UiTheme, WorkspaceEntry,
     };
     use crate::workspace::{manager::WorkspaceManager, WorkspaceSession};
     use std::{
@@ -4051,6 +2370,83 @@ mod tests {
 
         let _ = fs::remove_file(&path);
         let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn ui_state_backward_compat_missing_new_fields_deserializes() {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock")
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!("olly-ui-state-compat-{unique}"));
+        let path = root.join("ui_state.json");
+        fs::create_dir_all(&root).expect("create compat ui-state root");
+        let legacy_raw = r#"{
+  "theme": "emerald-dusk",
+  "models_collapsed": true,
+  "cloud_models_collapsed": false,
+  "local_models_collapsed": false,
+  "workspaces_collapsed": false,
+  "collapsed_workspace_ids": [1, 2],
+  "sidebar_index": 3
+}"#;
+        fs::write(&path, legacy_raw).expect("write legacy ui_state json");
+
+        let loaded = load_ui_state_from_path(&path).expect("load legacy ui_state");
+        assert_eq!(loaded.model, None);
+        assert_eq!(loaded.session_context, None);
+        assert_eq!(loaded.theme, UiTheme::EmeraldDusk);
+        assert_eq!(loaded.sidebar_index, 3);
+        assert_eq!(loaded.collapsed_workspace_ids, vec![1, 2]);
+
+        let _ = fs::remove_file(&path);
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn startup_model_precedence_cli_override_beats_saved_ui_model() {
+        let mut app = App::new(
+            String::from("http://localhost:11434"),
+            String::from("qwen3.5:cloud"),
+        );
+        let saved = UiRuntimeState {
+            model: Some(String::from("llama3.2:latest")),
+            theme: UiTheme::EmeraldDusk,
+            models_collapsed: false,
+            cloud_models_collapsed: false,
+            local_models_collapsed: false,
+            workspaces_collapsed: false,
+            collapsed_workspace_ids: Vec::new(),
+            sidebar_index: 0,
+            session_context: None,
+        };
+
+        apply_saved_ui_state_with_startup_precedence(&mut app, saved, "qwen3.5:cloud", true);
+
+        assert_eq!(app.model, "qwen3.5:cloud");
+    }
+
+    #[test]
+    fn startup_model_precedence_uses_saved_ui_model_without_cli_override() {
+        let mut app = App::new(
+            String::from("http://localhost:11434"),
+            String::from("llama3.2:latest"),
+        );
+        let saved = UiRuntimeState {
+            model: Some(String::from("qwen3.5:cloud")),
+            theme: UiTheme::EmeraldDusk,
+            models_collapsed: false,
+            cloud_models_collapsed: false,
+            local_models_collapsed: false,
+            workspaces_collapsed: false,
+            collapsed_workspace_ids: Vec::new(),
+            sidebar_index: 0,
+            session_context: None,
+        };
+
+        apply_saved_ui_state_with_startup_precedence(&mut app, saved, "llama3.2:latest", false);
+
+        assert_eq!(app.model, "qwen3.5:cloud");
     }
 
     #[test]
@@ -4961,6 +3357,47 @@ mod tests {
     }
 
     #[test]
+    fn session_delete_without_selection_and_without_active_shows_fallback_message() {
+        let (root, manager, mut session, mut app) = setup_app_state("session-delete-fallback-msg");
+        app.active_session_id = 0;
+        session.workspace_id = 0;
+        app.focus = FocusPane::Chat;
+
+        handle_command(
+            &mut app,
+            &manager,
+            &mut session,
+            "llama3.2:latest",
+            "/session delete",
+        )
+        .expect("session delete fallback branch");
+
+        let message = latest_system_message(&app).expect("expected fallback system message");
+        assert!(message.contains("No active workspace."));
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn workspace_delete_unknown_selector_shows_not_found_message() {
+        let (root, manager, mut session, mut app) = setup_app_state("workspace-delete-not-found");
+
+        handle_command(
+            &mut app,
+            &manager,
+            &mut session,
+            "llama3.2:latest",
+            "/workspace delete missing-workspace",
+        )
+        .expect("workspace delete unknown selector");
+
+        let message = latest_system_message(&app).expect("expected not-found message");
+        assert!(message.contains("Workspace not found for delete selection."));
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
     fn export_unknown_format_shows_explicit_error() {
         let (root, manager, mut session, mut app) = setup_app_state("export-unknown-format");
         let export_path = root.join("conversation.txt");
@@ -5085,5 +3522,97 @@ mod tests {
         assert!(app.sessions.is_empty());
         assert!(app.messages.is_empty());
         assert_eq!(app.status, "No workspace active");
+    }
+
+    #[test]
+    fn app_state_views_reflect_current_values() {
+        let mut app = App::new(
+            String::from("http://localhost:11434"),
+            String::from("llama3.2:latest"),
+        );
+        app.focus = FocusPane::Workspaces;
+        app.show_help = true;
+        app.sidebar_index = 3;
+        app.active_workspace_id = 11;
+        app.active_session_id = 22;
+        app.workspace_name = String::from("Refactor WS");
+        app.active_session_title = String::from("Main");
+        app.workspace_root_path = Some(String::from("C:/CODING/olly"));
+        app.model_context_window = Some(262_144);
+        app.prompt_tokens_used = Some(1024);
+        app.last_completion_tokens = Some(256);
+        app.peak_prompt_tokens = 4096;
+
+        let ui = app.ui_state_view();
+        assert_eq!(ui.focus, FocusPane::Workspaces);
+        assert!(ui.show_help);
+        assert_eq!(ui.sidebar_index, 3);
+
+        let session = app.session_state_view();
+        assert_eq!(session.active_workspace_id, 11);
+        assert_eq!(session.active_session_id, 22);
+        assert_eq!(session.workspace_name, "Refactor WS");
+        assert_eq!(session.active_session_title, "Main");
+        assert_eq!(session.workspace_root_path, Some("C:/CODING/olly"));
+
+        let telemetry = app.telemetry_state_view();
+        assert_eq!(telemetry.model_context_window, Some(262_144));
+        assert_eq!(telemetry.prompt_tokens_used, Some(1024));
+        assert_eq!(telemetry.last_completion_tokens, Some(256));
+        assert_eq!(telemetry.peak_prompt_tokens, 4096);
+    }
+
+    #[test]
+    fn workspace_help_text_snapshot_stable() {
+        let expected = [
+            "Workspace commands:",
+            "- /workspace list",
+            "- /workspace switch <id|name>",
+            "- /workspace create <name> --path <folder>",
+            "- /workspace create --path <folder> (name defaults to New Workspace)",
+            "- /workspace rename <new name> (renames selected/active workspace)",
+            "- /workspace delete (opens modal for selected workspace in sidebar)",
+            "- /workspace delete <id|name> (optional explicit target)",
+            "- Confirm delete modal with Enter, cancel with Esc",
+            "- Deleting the last workspace is allowed (you will see the welcome screen)",
+            "- /workspace where",
+            "- /workspace set-path <id|name> --path <folder>",
+            "- /workspace export <path>",
+            "- /workspace import <path>",
+        ]
+        .join("\n");
+        assert_eq!(workspace_help_text(), expected);
+    }
+
+    #[test]
+    fn session_help_text_snapshot_stable() {
+        let expected = [
+            "Session commands:",
+            "- /session list",
+            "- /session new <title>",
+            "- /session create <title> (alias of new)",
+            "- /session switch <id|title>",
+            "- /session rename <id> <new title>",
+            "- /session rename <title> --to <new title>",
+            "- /session delete (opens modal for selected session in sidebar)",
+            "- /session delete <id|title> (optional explicit target)",
+            "- Confirm delete modal with Enter, cancel with Esc",
+        ]
+        .join("\n");
+        assert_eq!(session_help_text(), expected);
+    }
+
+    #[test]
+    fn models_help_text_snapshot_stable() {
+        let expected = [
+            "Model commands:",
+            "- /models",
+            "- /models refresh",
+            "- /models add <model-name-or-ollama-library-url> (pull local or enable cloud)",
+            "- /models remove <model-name>",
+            "- /model <name> (switch active model)",
+        ]
+        .join("\n");
+        assert_eq!(models_help_text(), expected);
     }
 }

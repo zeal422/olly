@@ -17,6 +17,13 @@ use crate::app::{
     App, ConnectionStatus, FocusPane, ModelBucket, SidebarItem, SidebarSection, ToastLevel, UiTheme,
 };
 
+mod chat;
+mod input;
+mod markdown;
+mod modals;
+mod palette;
+mod sidebar;
+
 const SPINNER_FRAMES: &[&str] = &["|", "/", "-", "\\"];
 
 struct SyntaxEngine {
@@ -479,9 +486,9 @@ pub fn draw(frame: &mut Frame<'_>, app: &App) {
     if frame.area().width < 2 || frame.area().height < 2 {
         return;
     }
-    let palette = theme_palette(app.theme);
+    let palette = palette::theme_palette(app.theme);
     frame.render_widget(
-        Block::default().style(Style::default().bg(app_background(app.theme))),
+        Block::default().style(Style::default().bg(palette::app_background(app.theme))),
         frame.area(),
     );
 
@@ -495,7 +502,7 @@ pub fn draw(frame: &mut Frame<'_>, app: &App) {
         ])
         .split(frame.area());
 
-    render_status_bar(frame, app, root[0], palette);
+    sidebar::render_status_bar(frame, app, root[0], palette);
 
     let body = if frame.area().width < 115 {
         Layout::default()
@@ -509,9 +516,9 @@ pub fn draw(frame: &mut Frame<'_>, app: &App) {
             .split(root[1])
     };
 
-    render_models_panel(frame, app, body[0], palette);
-    render_chat_panel(frame, app, body[1], palette);
-    render_input_panel(frame, app, root[2], palette);
+    sidebar::render_models_panel(frame, app, body[0], palette);
+    chat::render_chat_panel(frame, app, body[1], palette);
+    input::render_input_panel(frame, app, root[2], palette);
 
     if let Some(toast) = &app.toast {
         let frame_width = frame.area().width;
@@ -550,68 +557,10 @@ pub fn draw(frame: &mut Frame<'_>, app: &App) {
         );
     }
 
-    if app.show_help {
-        let area = centered_rect(70, 70, frame.area());
-        frame.render_widget(Clear, area);
-        frame.render_widget(
-            Paragraph::new(help_text())
-                .style(Style::default().fg(palette.help_fg).bg(palette.help_bg))
-                .block(
-                    Block::default()
-                        .title("Help")
-                        .borders(Borders::ALL)
-                        .style(Style::default().fg(palette.help_border)),
-                )
-                .wrap(Wrap { trim: false }),
-            area,
-        );
-    }
-
-    if let Some(pending_delete) = &app.pending_workspace_delete {
-        let area = centered_rect(58, 28, frame.area());
-        frame.render_widget(Clear, area);
-        let body = format!(
-            "Delete workspace?\n\n{}\n\nEnter = confirm    Esc = cancel",
-            pending_delete.name
-        );
-        frame.render_widget(
-            Paragraph::new(body)
-                .style(Style::default().fg(palette.modal_fg).bg(palette.modal_bg))
-                .block(
-                    Block::default()
-                        .title("Confirm Delete")
-                        .borders(Borders::ALL)
-                        .style(Style::default().fg(palette.modal_border)),
-                )
-                .alignment(Alignment::Center)
-                .wrap(Wrap { trim: true }),
-            area,
-        );
-    }
-
-    if let Some(pending_delete) = &app.pending_session_delete {
-        let area = centered_rect(58, 28, frame.area());
-        frame.render_widget(Clear, area);
-        let body = format!(
-            "Delete session?\n\n{}\n\nEnter = confirm    Esc = cancel",
-            pending_delete.name
-        );
-        frame.render_widget(
-            Paragraph::new(body)
-                .style(Style::default().fg(palette.modal_fg).bg(palette.modal_bg))
-                .block(
-                    Block::default()
-                        .title("Confirm Delete")
-                        .borders(Borders::ALL)
-                        .style(Style::default().fg(palette.modal_border)),
-                )
-                .alignment(Alignment::Center)
-                .wrap(Wrap { trim: true }),
-            area,
-        );
-    }
-
-    render_theme_picker_modal(frame, app, palette);
+    modals::render_help_modal(frame, app, palette);
+    modals::render_workspace_delete_modal(frame, app, palette);
+    modals::render_session_delete_modal(frame, app, palette);
+    modals::render_theme_picker_modal(frame, app, palette);
 }
 
 fn render_status_bar(frame: &mut Frame<'_>, app: &App, area: Rect, palette: ThemePalette) {
@@ -1269,7 +1218,7 @@ fn render_chat_text(app: &App, palette: ThemePalette) -> Text<'static> {
             );
         }
 
-        let message_lines = markdown_lines(
+        let message_lines = markdown::markdown_lines(
             &message.content,
             base_style,
             app.syntax_highlighting,
@@ -1646,45 +1595,6 @@ fn scroll_window(chars: &[char], width: usize, offset: usize) -> String {
         .collect::<String>()
 }
 
-fn render_theme_picker_modal(frame: &mut Frame<'_>, app: &App, palette: ThemePalette) {
-    let Some(state) = app.theme_picker else {
-        return;
-    };
-
-    let area = centered_rect(62, 72, frame.area());
-    frame.render_widget(Clear, area);
-
-    let lines = app
-        .theme_picker_entries()
-        .iter()
-        .enumerate()
-        .map(|(index, theme)| {
-            let cursor = if index == state.selected { ">" } else { " " };
-            let active = if *theme == app.theme { "*" } else { " " };
-            let mode = if theme.is_light() { "light" } else { "dark" };
-            format!("{cursor} {active} {} ({mode})", theme.label())
-        })
-        .collect::<Vec<_>>()
-        .join("\n");
-    let body = format!(
-        "Theme Picker (live preview)\n\n{}\n\nUp/Down preview  |  Enter keep  |  Esc cancel",
-        lines
-    );
-
-    frame.render_widget(
-        Paragraph::new(body)
-            .style(Style::default().fg(palette.help_fg).bg(palette.help_bg))
-            .block(
-                Block::default()
-                    .title("Themes (/themes)")
-                    .borders(Borders::ALL)
-                    .style(Style::default().fg(palette.help_border)),
-            )
-            .wrap(Wrap { trim: true }),
-        area,
-    );
-}
-
 fn sidebar_action_hint(app: &App) -> String {
     match app.sidebar_item() {
         Some(SidebarItem::SectionHeader(SidebarSection::Models)) => String::from(
@@ -1714,42 +1624,6 @@ fn sidebar_action_hint(app: &App) -> String {
         }
         None => String::from("Tab focus | Enter select"),
     }
-}
-
-fn help_text() -> &'static str {
-    "Ctrl+Enter  Send message\n\
-Enter       New line (or run slash command)\n\
-Ctrl+Q      Quit (press twice)\n\
-F1          Toggle help\n\
-Esc         Close help/toast\n\
-Tab         Switch focus (or cycle slash autocomplete)\n\
-Arrows      Move input caret in chat (or move slash/sidebar selection)\n\
-PgUp/PgDn   Scroll chat faster\n\
-Enter       Select sidebar item (headers collapse/expand)\n\
-\n\
-Slash commands:\n\
-/commands, /models, /themes, /search, /export, /workspace, /session, /checkpoint\n\
-/attach, /clear-attachments, /model, /url"
-}
-
-fn centered_rect(percent_x: u16, percent_y: u16, area: Rect) -> Rect {
-    let popup_layout = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Percentage((100 - percent_y) / 2),
-            Constraint::Percentage(percent_y),
-            Constraint::Percentage((100 - percent_y) / 2),
-        ])
-        .split(area);
-
-    Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([
-            Constraint::Percentage((100 - percent_x) / 2),
-            Constraint::Percentage(percent_x),
-            Constraint::Percentage((100 - percent_x) / 2),
-        ])
-        .split(popup_layout[1])[1]
 }
 
 #[cfg(test)]

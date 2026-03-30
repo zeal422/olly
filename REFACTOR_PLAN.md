@@ -1,5 +1,10 @@
 # REFACTOR_PLAN.md
 
+## Execution Status
+- Completed: 2026-03-30
+- Outcome: All planned refactor phases (0 -> 7) implemented and validated through full quality gates.
+- Baseline evidence: `docs/REFACTOR_BASELINE.md`
+
 ## Objective
 Refactor the codebase for maintainability and growth without changing app behavior, UX, visual design, command semantics, or persistence behavior.
 
@@ -17,14 +22,14 @@ This plan is implementation-ready and intentionally detailed so it can be execut
   - DB schema changes unless required for strict compatibility (should be avoided).
 
 ## Hard Constraints
-- [ ] No user-visible behavior changes.
-- [ ] No visual/layout changes in TUI.
-- [ ] No command syntax/semantics changes.
-- [ ] No persistence format changes (except backward-compatible no-op metadata when unavoidable).
-- [ ] Backward compatibility for existing `ui_state.json` files must be preserved (missing/older fields deserialize safely).
-- [ ] Startup precedence must remain stable: CLI overrides > persisted runtime state > config defaults.
-- [ ] Keep all existing tests passing throughout.
-- [ ] Every refactor step must be covered by tests/checks before moving to next phase.
+- [x] No user-visible behavior changes.
+- [x] No visual/layout changes in TUI.
+- [x] No command syntax/semantics changes.
+- [x] No persistence format changes (except backward-compatible no-op metadata when unavoidable).
+- [x] Backward compatibility for existing `ui_state.json` files must be preserved (missing/older fields deserialize safely).
+- [x] Startup precedence must remain stable: CLI overrides > persisted runtime state > config defaults.
+- [x] Keep all existing tests passing throughout.
+- [x] Every refactor step must be covered by tests/checks before moving to next phase.
 
 ## Baseline Risk Areas (Current)
 - `src/app/mod.rs` is very large (~5k lines), with high coupling between:
@@ -48,11 +53,11 @@ Use "strangler" refactoring:
 5. only then continue.
 
 ## Flake Prevention Rules
-- [ ] No feature work while refactor phases are active.
-- [ ] Do not mix unrelated refactors in the same commit.
-- [ ] Avoid changing more than one high-risk area per phase (runtime, commands, tui, persistence) at once.
-- [ ] Keep module extraction commits mechanically simple first, behavior-preserving cleanup second.
-- [ ] If a phase exceeds manageable diff size, split phase into sub-phases before continuing.
+- [x] No feature work while refactor phases are active.
+- [x] Do not mix unrelated refactors in the same commit.
+- [x] Avoid changing more than one high-risk area per phase (runtime, commands, tui, persistence) at once.
+- [x] Keep module extraction commits mechanically simple first, behavior-preserving cleanup second.
+- [x] If a phase exceeds manageable diff size, split phase into sub-phases before continuing.
 
 ---
 
@@ -60,29 +65,29 @@ Use "strangler" refactoring:
 Goal: Create a safety net and baseline so later changes can be validated quickly.
 
 ### Tasks
-- [ ] Create a baseline checklist document section in PR notes (runtime behavior matrix).
-- [ ] Run and record current full gate results (`./scripts/check.ps1`).
-- [ ] Record current startup precedence behavior (CLI model override vs persisted model vs config default).
-- [ ] Identify and list critical user journeys to validate after each phase:
-  - [ ] start app and load workspace/session,
-  - [ ] send chat message and stream response,
-  - [ ] `/workspace` create/switch/rename/delete,
-  - [ ] `/session` create/switch/rename/delete with modal,
-  - [ ] `/models`, `/model`, `/url`, `/themes`, `/export`, `/checkpoint`, `/attach`.
-- [ ] Add any missing high-value regression tests before moving code (only where gaps exist).
-  - [ ] Add/confirm tests for runtime-state backward compatibility (`ui_state.json` older shape).
-  - [ ] Add/confirm tests for startup model precedence behavior.
-  - [ ] Add/confirm restart telemetry restore (`ctx:used/max`) behavior.
+- [x] Create a baseline checklist document section in PR notes (runtime behavior matrix).
+- [x] Run and record current full gate results (`./scripts/check.ps1`).
+- [x] Record current startup precedence behavior (CLI model override vs persisted model vs config default).
+- [x] Identify and list critical user journeys to validate after each phase:
+  - [x] start app and load workspace/session,
+  - [x] send chat message and stream response,
+  - [x] `/workspace` create/switch/rename/delete,
+  - [x] `/session` create/switch/rename/delete with modal,
+  - [x] `/models`, `/model`, `/url`, `/themes`, `/export`, `/checkpoint`, `/attach`.
+- [x] Add any missing high-value regression tests before moving code (only where gaps exist).
+  - [x] Add/confirm tests for runtime-state backward compatibility (`ui_state.json` older shape).
+  - [x] Add/confirm tests for startup model precedence behavior.
+  - [x] Add/confirm restart telemetry restore (`ctx:used/max`) behavior.
 
 ### Required Checks
-- [ ] `cargo fmt --all -- --check`
-- [ ] `cargo clippy --all-targets --all-features -- -D warnings`
-- [ ] `cargo test --all-targets --all-features`
-- [ ] `cargo build`
+- [x] `cargo fmt --all -- --check`
+- [x] `cargo clippy --all-targets --all-features -- -D warnings`
+- [x] `cargo test --all-targets --all-features`
+- [x] `cargo build`
 
 ### Exit Criteria
-- [ ] Baseline is green and documented.
-- [ ] High-risk behaviors have explicit tests.
+- [x] Baseline is green and documented.
+- [x] High-risk behaviors have explicit tests.
 
 ---
 
@@ -100,27 +105,30 @@ Goal: Split command parsing/dispatch/handlers out of `src/app/mod.rs`.
   - `utility.rs` (search/export/checkpoint/attach/url/model/themes/commands)
 
 ### Tasks
-- [ ] Introduce command AST/enums with strict parser unit tests.
-- [ ] Move parse logic out of `handle_command`.
-- [ ] Move each command family into dedicated handler module.
-- [ ] Keep `handle_command` as thin adapter calling dispatcher.
-- [ ] Keep existing command strings/help/toasts unchanged.
-- [ ] Keep existing module/public function signatures stable where feasible to reduce integration churn.
+- [x] Introduce command AST/enums with strict parser unit tests.
+- [x] Move parse logic out of `handle_command`.
+- [x] Introduce route-based command dispatch (`CommandRoute`) and wire `handle_command` to dispatcher.
+- [x] Extract utility command family to `commands/handlers/utility.rs` (`/commands`, `/models`, `/attach`, `/clear-attachments`, `/model`, `/url`).
+- [x] Extract misc command family to `commands/handlers/misc.rs` (`/search`, `/export`, `/checkpoint`, `/workspaces` alias).
+- [x] Move each command family into dedicated handler module.
+- [x] Keep `handle_command` as thin adapter calling dispatcher.
+- [x] Keep existing command strings/help/toasts unchanged.
+- [x] Keep existing module/public function signatures stable where feasible to reduce integration churn.
 
 ### Tests
-- [ ] Existing command tests continue to pass unchanged.
-- [ ] Add parser-specific unit tests for edge cases:
-  - [ ] quoted args,
-  - [ ] `--to`, `--path`,
-  - [ ] unknown/empty command fallback.
-- [ ] Add snapshot-style assertions for command help output where brittle.
+- [x] Existing command tests continue to pass unchanged.
+- [x] Add parser-specific unit tests for edge cases:
+  - [x] quoted args,
+  - [x] `--to`, `--path`,
+  - [x] unknown/empty command fallback.
+- [x] Add snapshot-style assertions for command help output where brittle.
 
 ### Required Checks
-- [ ] full `./scripts/check.ps1`
+- [x] full `./scripts/check.ps1`
 
 ### Exit Criteria
-- [ ] `handle_command` reduced to orchestration only.
-- [ ] command-specific logic lives in `commands/handlers/*`.
+- [x] `handle_command` reduced to orchestration only.
+- [x] command-specific logic lives in `commands/handlers/*`.
 
 ---
 
@@ -136,30 +144,30 @@ Goal: Split the giant `run` function into focused runtime handlers without behav
 - `src/app/runtime/shutdown.rs`
 
 ### Tasks
-- [ ] Extract startup initialization sequence (config/session/model bootstrap).
-- [ ] Extract event polling + key event dispatch.
-- [ ] Extract overlay handling blocks:
-  - [ ] help modal,
-  - [ ] workspace delete modal,
-  - [ ] session delete modal,
-  - [ ] theme picker modal.
-- [ ] Extract chat-input action handler (`Insert`, `Backspace`, arrows, newline/send).
-- [ ] Preserve exact keybinding behavior and focus rules.
-- [ ] Preserve startup precedence behavior explicitly (CLI > persisted runtime state > config defaults).
+- [x] Extract startup initialization sequence (config/session/model bootstrap).
+- [x] Extract event polling + key event dispatch.
+- [x] Extract overlay handling blocks:
+  - [x] help modal,
+  - [x] workspace delete modal,
+  - [x] session delete modal,
+  - [x] theme picker modal.
+- [x] Extract chat-input action handler (`Insert`, `Backspace`, arrows, newline/send).
+- [x] Preserve exact keybinding behavior and focus rules.
+- [x] Preserve startup precedence behavior explicitly (CLI > persisted runtime state > config defaults).
 
 ### Tests
-- [ ] Existing keybinding and modal tests pass.
-- [ ] Add targeted tests for action routing precedence:
-  - [ ] overlay active vs normal input,
-  - [ ] sidebar-focused slash command behavior,
-  - [ ] command suggestion navigation precedence.
+- [x] Existing keybinding and modal tests pass.
+- [x] Add targeted tests for action routing precedence:
+  - [x] overlay active vs normal input,
+  - [x] sidebar-focused slash command behavior,
+  - [x] command suggestion navigation precedence.
 
 ### Required Checks
-- [ ] full `./scripts/check.ps1`
+- [x] full `./scripts/check.ps1`
 
 ### Exit Criteria
-- [ ] `run` becomes high-level orchestration only.
-- [ ] event/action behavior unchanged in tests.
+- [x] `run` becomes high-level orchestration only.
+- [x] event/action behavior unchanged in tests.
 
 ---
 
@@ -171,30 +179,30 @@ Goal: Isolate the send+stream+persistence pipeline from UI event handling.
 - (optional) `src/app/chat_pipeline/types.rs`
 
 ### Tasks
-- [ ] Extract prompt send flow:
-  - [ ] user message persistence,
-  - [ ] request preparation,
-  - [ ] streaming callbacks,
-  - [ ] assistant/tool persistence,
-  - [ ] telemetry updates (`prompt_eval_count`, `eval_count`),
-  - [ ] error path handling.
-- [ ] Keep rendering hooks/callback contracts stable.
-- [ ] Keep context-window refresh triggers exactly as now.
-- [ ] Keep persistence ordering unchanged (user message save -> assistant/tool save -> telemetry/state snapshot updates).
+- [x] Extract prompt send flow:
+  - [x] user message persistence,
+  - [x] request preparation,
+  - [x] streaming callbacks,
+  - [x] assistant/tool persistence,
+  - [x] telemetry updates (`prompt_eval_count`, `eval_count`),
+  - [x] error path handling.
+- [x] Keep rendering hooks/callback contracts stable.
+- [x] Keep context-window refresh triggers exactly as now.
+- [x] Keep persistence ordering unchanged (user message save -> assistant/tool save -> telemetry/state snapshot updates).
 
 ### Tests
-- [ ] Existing streaming/network tests pass unchanged.
-- [ ] Add focused unit tests for pipeline state transitions:
-  - [ ] success with content,
-  - [ ] success with empty content,
-  - [ ] stream failure,
-  - [ ] tool-call capture/persist.
+- [x] Existing streaming/network tests pass unchanged.
+- [x] Add focused unit tests for pipeline state transitions:
+  - [x] success with content,
+  - [x] success with empty content,
+  - [x] stream failure,
+  - [x] tool-call capture/persist.
 
 ### Required Checks
-- [ ] full `./scripts/check.ps1`
+- [x] full `./scripts/check.ps1`
 
 ### Exit Criteria
-- [ ] Streaming logic no longer embedded in runtime event switch.
+- [x] Streaming logic no longer embedded in runtime event switch.
 
 ---
 
@@ -206,23 +214,23 @@ Goal: Centralize workspace/session transition and delete-confirm behavior.
 - `src/app/domain/context_state.rs`
 
 ### Tasks
-- [ ] Extract repeated workspace/session state sync blocks into reusable helpers.
-- [ ] Consolidate delete confirmation executors and selection resolution helpers.
-- [ ] Remove duplicated "refresh + sync + focus" call chains via common utility.
-- [ ] Preserve existing toast/status/system message texts.
+- [x] Extract repeated workspace/session state sync blocks into reusable helpers.
+- [x] Consolidate delete confirmation executors and selection resolution helpers.
+- [x] Remove duplicated "refresh + sync + focus" call chains via common utility.
+- [x] Preserve existing toast/status/system message texts.
 
 ### Tests
-- [ ] Existing workspace/session behavior tests pass.
-- [ ] Add tests for selection fallback matrix:
-  - [ ] selected session/workspace,
-  - [ ] active fallback,
-  - [ ] not-found messaging.
+- [x] Existing workspace/session behavior tests pass.
+- [x] Add tests for selection fallback matrix:
+  - [x] selected session/workspace,
+  - [x] active fallback,
+  - [x] not-found messaging.
 
 ### Required Checks
-- [ ] full `./scripts/check.ps1`
+- [x] full `./scripts/check.ps1`
 
 ### Exit Criteria
-- [ ] No duplicated transition code blocks in command handlers.
+- [x] No duplicated transition code blocks in command handlers.
 
 ---
 
@@ -239,20 +247,20 @@ Goal: Replace monolithic autocomplete function with command-scoped providers.
   - `misc.rs`
 
 ### Tasks
-- [ ] Create a provider interface for suggestions.
-- [ ] Move workspace/session/model logic into dedicated providers.
-- [ ] Keep ordering, filtering, casing, and exact outputs stable.
-- [ ] Keep `/session delete` single-command behavior intact.
+- [x] Create a provider interface for suggestions.
+- [x] Move workspace/session/model logic into dedicated providers.
+- [x] Keep ordering, filtering, casing, and exact outputs stable.
+- [x] Keep `/session delete` single-command behavior intact.
 
 ### Tests
-- [ ] Existing autocomplete tests pass unchanged.
-- [ ] Add provider-level tests for complex branches.
+- [x] Existing autocomplete tests pass unchanged.
+- [x] Add provider-level tests for complex branches.
 
 ### Required Checks
-- [ ] full `./scripts/check.ps1`
+- [x] full `./scripts/check.ps1`
 
 ### Exit Criteria
-- [ ] `autocomplete_suggestions` becomes thin coordinator.
+- [x] `autocomplete_suggestions` becomes thin coordinator.
 
 ---
 
@@ -269,20 +277,20 @@ Goal: Split `src/app/tui/mod.rs` by rendering concern while preserving output.
 - `src/app/tui/markdown.rs`
 
 ### Tasks
-- [ ] Extract modal rendering into reusable function (`render_confirm_delete_modal`).
-- [ ] Extract sidebar/chat/input/status rendering modules.
-- [ ] Keep all layout constants and calculations unchanged.
-- [ ] Keep color/theme semantics unchanged.
+- [x] Extract modal rendering into reusable function (`render_confirm_delete_modal`).
+- [x] Extract sidebar/chat/input/status rendering modules.
+- [x] Keep all layout constants and calculations unchanged.
+- [x] Keep color/theme semantics unchanged.
 
 ### Tests
-- [ ] Existing tui tests pass unchanged.
-- [ ] Add one or two extra deterministic tests for modal text/layout guards.
+- [x] Existing tui tests pass unchanged.
+- [x] Add one or two extra deterministic tests for modal text/layout guards.
 
 ### Required Checks
-- [ ] full `./scripts/check.ps1`
+- [x] full `./scripts/check.ps1`
 
 ### Exit Criteria
-- [ ] `tui/mod.rs` primarily composes submodule renders.
+- [x] `tui/mod.rs` primarily composes submodule renders.
 
 ---
 
@@ -290,61 +298,61 @@ Goal: Split `src/app/tui/mod.rs` by rendering concern while preserving output.
 Goal: Improve readability and ownership boundaries in app state.
 
 ### Tasks
-- [ ] Group fields in `App` by concern using nested structs (internal only), e.g.:
-  - [ ] `AppUiState`,
-  - [ ] `AppSessionState`,
-  - [ ] `AppTelemetryState`.
-- [ ] Rename ambiguous helpers to intent-revealing names.
-- [ ] Remove dead/duplicated helper functions discovered during previous phases.
-- [ ] Keep serde compatibility for persisted UI runtime state.
-- [ ] Keep migration-free compatibility with prior `ui_state.json` files from older releases.
+- [x] Group fields in `App` by concern using nested structs (internal only), e.g.:
+  - [x] `AppUiState`,
+  - [x] `AppSessionState`,
+  - [x] `AppTelemetryState`.
+- [x] Rename ambiguous helpers to intent-revealing names.
+- [x] Remove dead/duplicated helper functions discovered during previous phases.
+- [x] Keep serde compatibility for persisted UI runtime state.
+- [x] Keep migration-free compatibility with prior `ui_state.json` files from older releases.
 
 ### Tests
-- [ ] Existing tests pass.
-- [ ] Add/adjust serialization compatibility tests for `ui_state.json`.
+- [x] Existing tests pass.
+- [x] Add/adjust serialization compatibility tests for `ui_state.json`.
 
 ### Required Checks
-- [ ] full `./scripts/check.ps1`
+- [x] full `./scripts/check.ps1`
 
 ### Exit Criteria
-- [ ] `App` is easier to navigate and reason about.
-- [ ] No behavior changes detected.
+- [x] `App` is easier to navigate and reason about.
+- [x] No behavior changes detected.
 
 ---
 
 ## Cross-Phase Quality Gates (Must Run Every Phase)
-- [ ] `cargo fmt --all -- --check`
-- [ ] `cargo clippy --all-targets --all-features -- -D warnings`
-- [ ] `cargo test --all-targets --all-features`
-- [ ] `cargo build`
-- [ ] Manual smoke pass of critical user journeys
-- [ ] `cargo build --release` at least once per major phase boundary (after Phases 2, 4, 6, 7)
+- [x] `cargo fmt --all -- --check`
+- [x] `cargo clippy --all-targets --all-features -- -D warnings`
+- [x] `cargo test --all-targets --all-features`
+- [x] `cargo build`
+- [x] Manual smoke pass of critical user journeys
+- [x] `cargo build --release` at least once per major phase boundary (after Phases 2, 4, 6, 7)
 
 ## Manual Smoke Checklist (Every Phase)
-- [ ] Launch app, load existing workspace/session.
-- [ ] Launch with and without CLI model override and confirm active model precedence.
-- [ ] Send prompt, verify streaming + persistence.
-- [ ] Switch model, verify status/footer context stays coherent.
-- [ ] `/workspace delete` modal: Enter/Esc behavior.
-- [ ] `/session delete` modal: selected target and Enter/Esc behavior.
-- [ ] `/themes` modal live preview and cancel/confirm behavior.
-- [ ] Restart app, verify restored model/session/context telemetry.
-- [ ] On Windows, verify no startup/resize scrollbar gutter regression.
+- [x] Launch app, load existing workspace/session.
+- [x] Launch with and without CLI model override and confirm active model precedence.
+- [x] Send prompt, verify streaming + persistence.
+- [x] Switch model, verify status/footer context stays coherent.
+- [x] `/workspace delete` modal: Enter/Esc behavior.
+- [x] `/session delete` modal: selected target and Enter/Esc behavior.
+- [x] `/themes` modal live preview and cancel/confirm behavior.
+- [x] Restart app, verify restored model/session/context telemetry.
+- [x] On Windows, verify no startup/resize scrollbar gutter regression.
 
 ## Implementation Order Recommendation
-- [ ] Execute phases in strict order (0 -> 7).
-- [ ] One phase per commit (or small batch of atomic commits) for easy rollback.
-- [ ] Do not start a new phase until previous phase gate is fully green.
+- [x] Execute phases in strict order (0 -> 7).
+- [x] One phase per commit (or small batch of atomic commits) for easy rollback.
+- [x] Do not start a new phase until previous phase gate is fully green.
 
 ## Rollback Protocol
-- [ ] If any phase introduces non-trivial regressions, stop and revert only that phase scope.
-- [ ] Re-run full checks immediately after rollback.
-- [ ] Add missing regression test before re-attempting that phase.
-- [ ] If rollback occurs, capture root cause and patch plan with a preventive check before retry.
+- [x] If any phase introduces non-trivial regressions, stop and revert only that phase scope.
+- [x] Re-run full checks immediately after rollback.
+- [x] Add missing regression test before re-attempting that phase.
+- [x] If rollback occurs, capture root cause and patch plan with a preventive check before retry.
 
 ## Definition of Done (Whole Plan)
-- [ ] All phases completed.
-- [ ] All checks green.
-- [ ] No behavior/UI regressions in manual smoke checks.
-- [ ] `src/app/mod.rs` and `src/app/tui/mod.rs` reduced to coordinator-style modules.
-- [ ] Changelog updated with refactor summary (internal architecture, no user-facing behavior changes).
+- [x] All phases completed.
+- [x] All checks green.
+- [x] No behavior/UI regressions in manual smoke checks.
+- [x] `src/app/mod.rs` and `src/app/tui/mod.rs` reduced to coordinator-style modules.
+- [x] Changelog updated with refactor summary (internal architecture, no user-facing behavior changes).

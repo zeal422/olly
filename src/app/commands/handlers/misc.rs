@@ -1,0 +1,107 @@
+use std::path::PathBuf;
+
+use crate::{
+    app::{commands::CommandRoute, load_conversation_into_app, App, ToastLevel},
+    workspace::{manager::WorkspaceManager, WorkspaceSession},
+};
+
+pub(crate) fn handle(
+    app: &mut App,
+    manager: &WorkspaceManager,
+    session: &mut WorkspaceSession,
+    route: CommandRoute,
+    parts: &[&str],
+) -> Result<bool, Box<dyn std::error::Error>> {
+    match route {
+        CommandRoute::Search => {
+            let query = parts.get(1..).map(|v| v.join(" ")).unwrap_or_default();
+            if query.trim().is_empty() {
+                app.push_system("Usage: /search <query>".to_string());
+            } else {
+                let hits = manager.search_messages(&query)?;
+                if hits.is_empty() {
+                    app.push_system("No matches found.".to_string());
+                } else {
+                    let preview = hits
+                        .into_iter()
+                        .take(8)
+                        .map(|h| format!("#{} {}: {}", h.conversation_id, h.role, h.content))
+                        .collect::<Vec<_>>()
+                        .join("\n");
+                    app.push_system(format!("Search results:\n{preview}"));
+                }
+            }
+        }
+        CommandRoute::Export => {
+            if !app.has_active_session() || session.conversation_id <= 0 {
+                app.push_system(
+                    "No active session to export. Create or switch to a workspace first."
+                        .to_string(),
+                );
+                return Ok(true);
+            }
+            if parts.len() < 3 {
+                app.push_system("Usage: /export <json|md> <path>".to_string());
+            } else {
+                let format = parts[1];
+                let path = PathBuf::from(crate::app::unquote_command_value(&parts[2..].join(" ")));
+                match format {
+                    "json" => manager.export_conversation_json(session.conversation_id, &path)?,
+                    "md" | "markdown" => {
+                        manager.export_conversation_markdown(session.conversation_id, &path)?
+                    }
+                    _ => {
+                        app.push_system("Unknown export format. Use json or md.".to_string());
+                        return Ok(true);
+                    }
+                }
+                app.set_toast(
+                    ToastLevel::Success,
+                    format!("Conversation exported to {}", path.display()),
+                );
+            }
+        }
+        CommandRoute::WorkspacesAlias => {
+            app.push_system("Use `/workspace list`.".to_string());
+        }
+        CommandRoute::Checkpoint => {
+            if !app.has_active_session() || session.conversation_id <= 0 {
+                app.push_system(
+                    "No active session for checkpoints. Create or switch to a workspace first."
+                        .to_string(),
+                );
+                return Ok(true);
+            }
+            if parts.len() < 3 {
+                app.push_system("Usage: /checkpoint <save|restore> <name>".to_string());
+            } else {
+                let sub = parts[1];
+                let name = parts[2..].join(" ");
+                match sub {
+                    "save" => {
+                        manager.save_checkpoint(session.conversation_id, &name)?;
+                        app.set_toast(ToastLevel::Success, format!("Checkpoint saved: {name}"));
+                    }
+                    "restore" => {
+                        let restored = manager.restore_checkpoint(
+                            session.workspace_id,
+                            session.conversation_id,
+                            &name,
+                        )?;
+                        session.conversation_id = restored;
+                        app.active_session_id = restored;
+                        load_conversation_into_app(app, manager, session.conversation_id)?;
+                        app.set_toast(
+                            ToastLevel::Success,
+                            format!("Restored checkpoint into new conversation: {name}"),
+                        );
+                    }
+                    _ => app.push_system("Unknown checkpoint subcommand.".to_string()),
+                }
+            }
+        }
+        _ => return Ok(false),
+    }
+
+    Ok(true)
+}
