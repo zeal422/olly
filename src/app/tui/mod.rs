@@ -808,26 +808,68 @@ fn render_chat_panel(frame: &mut Frame<'_>, app: &App, area: Rect, palette: Them
     }
 
     if app.active_workspace_id <= 0 {
-        let welcome = [
-            "Olly",
-            "",
-            "Terminal workspace chat for local/cloud Ollama models.",
-            "",
-            "Start here:",
-            "1. Press Tab to focus sidebar",
-            "2. Select `+ New Workspace` and press Enter",
-            "3. Add a folder path and press Enter",
-            "4. Type a prompt and send with Ctrl+Enter",
-            "",
-            "Tip: You can also run `/workspace create New Workspace --path <folder>`.",
-        ]
-        .join("\n");
+        let welcome_lines = vec![
+            Line::from(Span::styled(
+                "======================================================",
+                Style::default()
+                    .fg(palette.border_active)
+                    .add_modifier(Modifier::BOLD),
+            )),
+            Line::from(Span::styled(
+                "        OLLY",
+                Style::default()
+                    .fg(palette.border_active)
+                    .add_modifier(Modifier::BOLD),
+            )),
+            Line::from(Span::styled(
+                "======================================================",
+                Style::default()
+                    .fg(palette.border_active)
+                    .add_modifier(Modifier::BOLD),
+            )),
+            Line::from(""),
+            Line::from("Terminal workspace chat for local/cloud Ollama models."),
+            Line::from(""),
+            Line::from(Span::styled(
+                "Requirements:",
+                Style::default()
+                    .fg(palette.chat_text)
+                    .add_modifier(Modifier::BOLD),
+            )),
+            Line::from("- Install Ollama"),
+            Line::from("- Start Ollama server (`ollama serve`)"),
+            Line::from("- If needed, set URL with `/url <http://host:port>`"),
+            Line::from(""),
+            Line::from(Span::styled(
+                "Start here:",
+                Style::default()
+                    .fg(palette.chat_text)
+                    .add_modifier(Modifier::BOLD),
+            )),
+            Line::from("1. Press Tab to focus sidebar"),
+            Line::from("2. Select `+ New Workspace` and press Enter"),
+            Line::from("3. Add a folder path and press Enter"),
+            Line::from("4. Type a prompt and send with Ctrl+Enter"),
+            Line::from(""),
+            Line::from("Tip: You can also run `/workspace create New Workspace --path <folder>`."),
+        ];
+        let welcome_height = welcome_lines.len() as u16;
+        let top_padding = inner
+            .height
+            .saturating_sub(welcome_height)
+            .saturating_div(2);
+        let welcome_area = Rect {
+            x: inner.x,
+            y: inner.y.saturating_add(top_padding),
+            width: inner.width,
+            height: inner.height.saturating_sub(top_padding),
+        };
         frame.render_widget(
-            Paragraph::new(welcome)
+            Paragraph::new(Text::from(welcome_lines))
                 .style(Style::default().fg(palette.body_muted))
                 .alignment(Alignment::Center)
                 .wrap(Wrap { trim: true }),
-            inner,
+            welcome_area,
         );
         return;
     }
