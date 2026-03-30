@@ -4,6 +4,23 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project follows Semantic Versioning.
 
+## [0.0.10] - 2026-03-30
+
+### Added
+- New `src/app/platform/mod.rs` module for platform-specific console/window behavior (maximize, scrollbar hiding, cell-grid snapping, and buffer/window synchronization).
+- New command orchestration module `src/app/commands/execute.rs` to run slash-command execution flow outside `src/app/mod.rs`.
+- New runtime confirm-delete module `src/app/runtime/confirm_delete.rs` for workspace/session delete confirmation execution logic.
+- New extracted app test suite under `src/app/mod_tests/` (`mod.rs`, `helpers.rs`, `autocomplete.rs`, `workspace_session.rs`, `ui_runtime_state.rs`, `regressions.rs`), moving the large in-file tests out of `src/app/mod.rs`.
+
+### Fixed
+- Removed dead-code risk from legacy delete-confirm paths by routing all runtime/handler call sites through `runtime::confirm_delete`.
+- Preserved slash-command behavior while relocating execution path from `app::mod` to `commands::execute`.
+
+### Modified
+- `src/app/mod.rs` was reduced from 3267 lines to 1455 lines by extracting platform helpers, command execution flow, delete-confirm execution logic, and the monolithic in-file test module.
+- Runtime modules now call `app::platform` helpers directly for startup/resize console handling.
+- Docs updated to reflect the new architecture modules (`README.md`, `AGENTS.md`).
+
 ## [0.0.9] - 2026-03-30
 
 ### Added

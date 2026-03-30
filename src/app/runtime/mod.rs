@@ -1,3 +1,4 @@
+pub mod confirm_delete;
 pub mod event_loop;
 pub mod key_actions;
 pub mod overlays;

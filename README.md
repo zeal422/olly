@@ -24,10 +24,12 @@ The app keeps user-facing behavior stable while separating responsibilities in `
 
 - `commands/`: slash-command parse, route, and handler modules.
 - `runtime/`: startup, event loop, key-action routing, overlay routing, terminal shutdown.
+- `platform/`: platform-specific console/window behavior helpers.
 - `chat_pipeline.rs`: send/stream/persist flow for chat messages.
 - `domain/`: workspace/session transition and context-state helpers.
 - `autocomplete/`: command-scoped suggestion providers.
 - `tui/`: rendering modules for palette/sidebar/chat/input/modals/markdown.
+- `mod_tests/`: app-level unit tests extracted from `mod.rs`.
 
 ## Installation
 

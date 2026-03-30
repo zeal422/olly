@@ -1,8 +1,8 @@
 use crate::{
     app::chat_pipeline,
+    app::commands::execute::execute_slash_command,
     app::{
-        command_may_change_model_context, execute_slash_command, refresh_model_context_window, App,
-        FocusPane, ToastLevel,
+        command_may_change_model_context, refresh_model_context_window, App, FocusPane, ToastLevel,
     },
     workspace::{manager::WorkspaceManager, WorkspaceSession},
 };

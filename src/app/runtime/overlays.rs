@@ -1,5 +1,5 @@
 use crate::{
-    app::{confirm_pending_session_delete, confirm_pending_workspace_delete, App, ToastLevel},
+    app::{App, ToastLevel},
     workspace::{manager::WorkspaceManager, WorkspaceSession},
 };
 
@@ -30,9 +30,12 @@ pub(crate) fn handle_overlay_action(
                 app.set_toast(ToastLevel::Info, "Workspace delete canceled");
             }
             crate::app::input::InputAction::NewLine | crate::app::input::InputAction::Send => {
-                if let Err(err) =
-                    confirm_pending_workspace_delete(app, manager, session, default_model)
-                {
+                if let Err(err) = super::confirm_delete::confirm_pending_workspace_delete(
+                    app,
+                    manager,
+                    session,
+                    default_model,
+                ) {
                     app.push_system(format!("Workspace delete failed: {err}"));
                     app.set_toast(ToastLevel::Error, "Workspace delete failed");
                 }
@@ -50,7 +53,9 @@ pub(crate) fn handle_overlay_action(
                 app.set_toast(ToastLevel::Info, "Session delete canceled");
             }
             crate::app::input::InputAction::NewLine | crate::app::input::InputAction::Send => {
-                if let Err(err) = confirm_pending_session_delete(app, manager, session) {
+                if let Err(err) =
+                    super::confirm_delete::confirm_pending_session_delete(app, manager, session)
+                {
                     app.push_system(format!("Session delete failed: {err}"));
                     app.set_toast(ToastLevel::Error, "Session delete failed");
                 }

@@ -6,8 +6,8 @@ use crate::{
         workspace_session::{apply_workspace_session_transition, open_workspace_delete_modal},
     },
     app::{
-        confirm_pending_workspace_delete, next_workspace_name, unquote_command_value,
-        workspace_help_text, App, SidebarItem, ToastLevel,
+        next_workspace_name, unquote_command_value, workspace_help_text, App, SidebarItem,
+        ToastLevel,
     },
     workspace::{manager::WorkspaceManager, WorkspaceSession},
 };
@@ -241,7 +241,12 @@ pub(crate) fn handle(
                 return Ok(true);
             }
             if matches!(delete_args.first(), Some(&"--confirm")) {
-                confirm_pending_workspace_delete(app, manager, session, default_model)?;
+                crate::app::runtime::confirm_delete::confirm_pending_workspace_delete(
+                    app,
+                    manager,
+                    session,
+                    default_model,
+                )?;
                 return Ok(true);
             }
 

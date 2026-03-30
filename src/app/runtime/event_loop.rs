@@ -3,7 +3,7 @@ use std::path::Path;
 use crossterm::event::{self, Event};
 
 use crate::{
-    app::{hide_console_scrollbars, save_ui_state_to_path, App, UiRuntimeState},
+    app::{save_ui_state_to_path, App, UiRuntimeState},
     workspace::{manager::WorkspaceManager, WorkspaceSession},
 };
 
@@ -32,7 +32,7 @@ pub(crate) async fn run(
                 Event::Resize(_, _) => {
                     terminal.autoresize()?;
                     terminal.clear()?;
-                    hide_console_scrollbars();
+                    crate::app::platform::hide_console_scrollbars();
                 }
                 Event::Key(key) => {
                     let action = crate::app::input::resolve_key_event_with_bindings(

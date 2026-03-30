@@ -32,9 +32,11 @@ src/
 |   |-- input.rs             # Input handling / key action mapping
 |   |-- commands/            # Slash-command parser/dispatcher/handlers
 |   |-- runtime/             # Startup, event loop, overlay/key routing, shutdown
+|   |-- platform/            # Platform-specific console/window helpers
 |   |-- autocomplete/        # Command suggestion providers
 |   |-- domain/              # Workspace/session transition helpers
 |   |-- chat_pipeline.rs     # Send + stream + persistence pipeline
+|   |-- mod_tests/           # App-level unit tests extracted from mod.rs
 |   `-- tui/                 # Terminal UI rendering components
 |-- config/                  # Configuration management (config.toml, platform paths)
 |-- history/                 # Chat history and SQLite persistence
@@ -230,9 +232,11 @@ autocomplete = "Tab"
 | `src/app/mod.rs` | Core App struct + orchestration adapters |
 | `src/app/commands/` | Slash-command parser/dispatcher/handler modules |
 | `src/app/runtime/` | Startup/event-loop/key/overlay/shutdown runtime modules |
+| `src/app/platform/` | Platform-specific console/window behavior helpers |
 | `src/app/autocomplete/` | Command-scoped autocomplete providers |
 | `src/app/domain/` | Workspace/session domain helpers |
 | `src/app/chat_pipeline.rs` | Chat send/stream/persist pipeline |
+| `src/app/mod_tests/` | App-level unit tests formerly in `mod.rs` |
 | `src/app/tui/` | Terminal UI rendering modules |
 | `src/ollama/` | Ollama API client with streaming support |
 | `src/workspace/` | Workspace and session SQLite management |

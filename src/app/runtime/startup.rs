@@ -9,11 +9,9 @@ use ratatui::{backend::CrosstermBackend, Terminal};
 
 use crate::{
     app::{
-        apply_saved_ui_state_with_startup_precedence, hide_console_scrollbars,
-        load_conversation_into_app, load_ui_state_from_path, maximize_console_window,
-        refresh_model_context_window, snap_console_window_to_cell_grid,
-        sync_console_buffer_to_window, ui_state_path_for_config, App, ConnectionStatus,
-        UiRuntimeState,
+        apply_saved_ui_state_with_startup_precedence, load_conversation_into_app,
+        load_ui_state_from_path, refresh_model_context_window, ui_state_path_for_config, App,
+        ConnectionStatus, UiRuntimeState,
     },
     config::AppConfig,
     workspace::{manager::WorkspaceManager, WorkspaceSession},
@@ -116,16 +114,16 @@ pub(crate) async fn bootstrap(
 
 pub(crate) fn init_terminal() -> Result<super::AppTerminal, Box<dyn std::error::Error>> {
     let mut stdout = std::io::stdout();
-    maximize_console_window();
-    snap_console_window_to_cell_grid();
-    hide_console_scrollbars();
-    sync_console_buffer_to_window(true);
+    crate::app::platform::maximize_console_window();
+    crate::app::platform::snap_console_window_to_cell_grid();
+    crate::app::platform::hide_console_scrollbars();
+    crate::app::platform::sync_console_buffer_to_window(true);
     enable_raw_mode()?;
     execute!(stdout, EnterAlternateScreen)?;
-    maximize_console_window();
-    snap_console_window_to_cell_grid();
-    hide_console_scrollbars();
-    sync_console_buffer_to_window(true);
+    crate::app::platform::maximize_console_window();
+    crate::app::platform::snap_console_window_to_cell_grid();
+    crate::app::platform::hide_console_scrollbars();
+    crate::app::platform::sync_console_buffer_to_window(true);
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
     terminal.autoresize()?;
