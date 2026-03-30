@@ -17,6 +17,18 @@ function Get-ProjectVersion {
     return $line.Matches[0].Groups[1].Value
 }
 
+function Get-LatestChangelogVersion {
+    param([string]$ChangelogPath)
+    if (-not (Test-Path $ChangelogPath)) {
+        throw "Changelog not found at $ChangelogPath."
+    }
+    $line = Select-String -Path $ChangelogPath -Pattern '^\s*##\s*\[([0-9]+\.[0-9]+\.[0-9]+)\]' | Select-Object -First 1
+    if (-not $line) {
+        throw "Could not read latest changelog version from $ChangelogPath."
+    }
+    return $line.Matches[0].Groups[1].Value
+}
+
 function Get-IsccPath {
     $cmd = Get-Command ISCC.exe -ErrorAction SilentlyContinue
     if ($cmd) {
@@ -43,6 +55,7 @@ function Get-IsccPath {
 
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 $cargoToml = Join-Path $repoRoot "Cargo.toml"
+$changelogPath = Join-Path $repoRoot "CHANGELOG.md"
 $installerScript = Join-Path $repoRoot "installer\olly.iss"
 $iconPath = Join-Path $repoRoot "assets\icon\olly.ico"
 
@@ -56,6 +69,11 @@ if (-not (Test-Path $iconPath)) {
 
 if ([string]::IsNullOrWhiteSpace($Version)) {
     $Version = Get-ProjectVersion -CargoTomlPath $cargoToml
+}
+
+$latestChangelogVersion = Get-LatestChangelogVersion -ChangelogPath $changelogPath
+if ($Version -ne $latestChangelogVersion) {
+    throw "Version mismatch: installer version '$Version' does not match latest CHANGELOG version '$latestChangelogVersion'. Align versions before building installer."
 }
 
 if (-not $SkipBuild) {
