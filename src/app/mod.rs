@@ -412,6 +412,14 @@ pub struct PendingWorkspaceDelete {
 }
 
 #[derive(Debug, Clone)]
+pub struct PendingSessionDelete {
+    pub workspace_id: i64,
+    pub id: i64,
+    pub name: String,
+    pub expires_at: Instant,
+}
+
+#[derive(Debug, Clone)]
 pub struct WorkspaceEntry {
     pub id: i64,
     pub name: String,
@@ -436,7 +444,20 @@ pub struct Message {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
 #[serde(default)]
+struct SessionContextSnapshot {
+    workspace_id: i64,
+    session_id: i64,
+    model: String,
+    model_context_window: Option<u32>,
+    prompt_tokens_used: Option<u32>,
+    last_completion_tokens: Option<u32>,
+    peak_prompt_tokens: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
+#[serde(default)]
 struct UiRuntimeState {
+    model: Option<String>,
     theme: UiTheme,
     models_collapsed: bool,
     cloud_models_collapsed: bool,
@@ -444,6 +465,7 @@ struct UiRuntimeState {
     workspaces_collapsed: bool,
     collapsed_workspace_ids: Vec<i64>,
     sidebar_index: usize,
+    session_context: Option<SessionContextSnapshot>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -472,6 +494,10 @@ pub struct App {
     pub workspace_root_path: Option<String>,
     pub active_session_id: i64,
     pub active_session_title: String,
+    pub model_context_window: Option<u32>,
+    pub prompt_tokens_used: Option<u32>,
+    pub last_completion_tokens: Option<u32>,
+    pub peak_prompt_tokens: u32,
     pub status: String,
     pub connection_status: ConnectionStatus,
     pub focus: FocusPane,
@@ -483,12 +509,14 @@ pub struct App {
     pub syntax_highlighting: bool,
     pub pending_images: Vec<PendingImage>,
     pub pending_workspace_delete: Option<PendingWorkspaceDelete>,
+    pub pending_session_delete: Option<PendingSessionDelete>,
     pub theme: UiTheme,
     pub theme_picker: Option<ThemePickerState>,
     pub command_suggestion_index: usize,
     pub input_cursor_char_index: usize,
     pub input_cursor_preferred_column: Option<usize>,
     pub quit_armed_until: Option<Instant>,
+    restored_session_context: Option<SessionContextSnapshot>,
     should_quit: bool,
 }
 
@@ -513,6 +541,10 @@ impl App {
             workspace_root_path: None,
             active_session_id: 0,
             active_session_title: String::from("Session"),
+            model_context_window: None,
+            prompt_tokens_used: None,
+            last_completion_tokens: None,
+            peak_prompt_tokens: 0,
             status: String::from("Ready"),
             connection_status: ConnectionStatus::Unknown,
             focus: FocusPane::Chat,
@@ -524,12 +556,14 @@ impl App {
             syntax_highlighting: true,
             pending_images: Vec::new(),
             pending_workspace_delete: None,
+            pending_session_delete: None,
             theme: UiTheme::default(),
             theme_picker: None,
             command_suggestion_index: 0,
             input_cursor_char_index: 0,
             input_cursor_preferred_column: None,
             quit_armed_until: None,
+            restored_session_context: None,
             should_quit: false,
         }
     }
@@ -546,6 +580,7 @@ impl App {
             .collect::<Vec<_>>();
         collapsed_workspace_ids.sort_unstable();
         UiRuntimeState {
+            model: (!self.model.is_empty()).then_some(self.model.clone()),
             theme: self.theme,
             models_collapsed: self.models_collapsed,
             cloud_models_collapsed: self.cloud_models_collapsed,
@@ -553,17 +588,70 @@ impl App {
             workspaces_collapsed: self.workspaces_collapsed,
             collapsed_workspace_ids,
             sidebar_index: self.sidebar_index,
+            session_context: self.capture_active_session_context_snapshot(),
         }
     }
 
     fn apply_ui_state(&mut self, state: UiRuntimeState) {
-        self.theme = state.theme;
-        self.models_collapsed = state.models_collapsed;
-        self.cloud_models_collapsed = state.cloud_models_collapsed;
-        self.local_models_collapsed = state.local_models_collapsed;
-        self.workspaces_collapsed = state.workspaces_collapsed;
-        self.collapsed_workspace_ids = state.collapsed_workspace_ids.into_iter().collect();
-        self.sidebar_index = state.sidebar_index;
+        let UiRuntimeState {
+            model,
+            theme,
+            models_collapsed,
+            cloud_models_collapsed,
+            local_models_collapsed,
+            workspaces_collapsed,
+            collapsed_workspace_ids,
+            sidebar_index,
+            session_context,
+        } = state;
+        if let Some(saved_model) = model {
+            if !saved_model.trim().is_empty() {
+                self.model = saved_model;
+            }
+        }
+        self.theme = theme;
+        self.models_collapsed = models_collapsed;
+        self.cloud_models_collapsed = cloud_models_collapsed;
+        self.local_models_collapsed = local_models_collapsed;
+        self.workspaces_collapsed = workspaces_collapsed;
+        self.collapsed_workspace_ids = collapsed_workspace_ids.into_iter().collect();
+        self.sidebar_index = sidebar_index;
+        self.restored_session_context = session_context;
+    }
+
+    fn capture_active_session_context_snapshot(&self) -> Option<SessionContextSnapshot> {
+        if self.active_workspace_id <= 0 || self.active_session_id <= 0 || self.model.is_empty() {
+            return None;
+        }
+        Some(SessionContextSnapshot {
+            workspace_id: self.active_workspace_id,
+            session_id: self.active_session_id,
+            model: self.model.clone(),
+            model_context_window: self.model_context_window,
+            prompt_tokens_used: self.prompt_tokens_used,
+            last_completion_tokens: self.last_completion_tokens,
+            peak_prompt_tokens: self.peak_prompt_tokens,
+        })
+    }
+
+    fn persist_active_session_context_snapshot(&mut self) {
+        self.restored_session_context = self.capture_active_session_context_snapshot();
+    }
+
+    fn restore_session_context_snapshot_if_match(&mut self) {
+        let Some(snapshot) = self.restored_session_context.as_ref() else {
+            return;
+        };
+        if snapshot.workspace_id != self.active_workspace_id
+            || snapshot.session_id != self.active_session_id
+            || snapshot.model != self.model
+        {
+            return;
+        }
+        self.model_context_window = snapshot.model_context_window;
+        self.prompt_tokens_used = snapshot.prompt_tokens_used;
+        self.last_completion_tokens = snapshot.last_completion_tokens;
+        self.peak_prompt_tokens = snapshot.peak_prompt_tokens;
     }
 
     pub fn tick(&mut self) {
@@ -576,6 +664,11 @@ impl App {
         if let Some(pending_delete) = &self.pending_workspace_delete {
             if Instant::now() > pending_delete.expires_at {
                 self.pending_workspace_delete = None;
+            }
+        }
+        if let Some(pending_delete) = &self.pending_session_delete {
+            if Instant::now() > pending_delete.expires_at {
+                self.pending_session_delete = None;
             }
         }
     }
@@ -982,6 +1075,10 @@ impl App {
         self.workspace_root_path = None;
         self.active_session_id = 0;
         self.active_session_title = String::from("No Session");
+        self.pending_session_delete = None;
+        self.prompt_tokens_used = None;
+        self.last_completion_tokens = None;
+        self.peak_prompt_tokens = 0;
         self.sessions.clear();
         self.messages.clear();
         self.status = String::from("No workspace active");
@@ -1710,30 +1807,7 @@ fn autocomplete_suggestions(
         }
 
         if sub == "delete" {
-            let arg_partial = rest[sub.len()..].trim();
-            let mut suggestions = sessions
-                .iter()
-                .flat_map(|session| {
-                    let by_id = format!("/session delete {}", session.id);
-                    let by_name = format!("/session delete {}", session.title);
-                    [by_id, by_name]
-                })
-                .filter(|candidate| {
-                    if arg_partial.is_empty() {
-                        true
-                    } else {
-                        candidate
-                            .to_lowercase()
-                            .starts_with(&format!("/session delete {}", arg_partial.to_lowercase()))
-                    }
-                })
-                .collect::<Vec<_>>();
-            suggestions.sort();
-            suggestions.dedup();
-            if suggestions.is_empty() {
-                suggestions.push(String::from("/session delete"));
-            }
-            return suggestions;
+            return vec![String::from("/session delete")];
         }
     }
 
@@ -1884,12 +1958,16 @@ pub async fn run(
     let config = AppConfig::load_or_create()?;
     let ui_state_path = ui_state_path_for_config(&config);
     let url = url_override.unwrap_or_else(|| config.ollama.url.clone());
-    let model = model_override.unwrap_or_else(|| config.defaults.model.clone());
-    let mut app = App::new(url, model);
+    let model_was_overridden = model_override.is_some();
+    let startup_model = model_override.unwrap_or_else(|| config.defaults.model.clone());
+    let mut app = App::new(url, startup_model.clone());
     app.workspace_name = config.defaults.workspace.clone();
     app.syntax_highlighting = config.ui.syntax_highlighting;
     if let Some(saved_ui_state) = load_ui_state_from_path(&ui_state_path) {
         app.apply_ui_state(saved_ui_state);
+        if model_was_overridden {
+            app.model = startup_model;
+        }
     }
     let input_bindings = input::InputBindings::from_config(&config.keybindings);
 
@@ -1938,6 +2016,10 @@ pub async fn run(
             app.set_toast(ToastLevel::Error, format!("Model list unavailable: {err}"));
         }
     }
+    // Re-apply restored per-session context after startup model normalization.
+    // This preserves previous ctx usage when the active model resolves to a known name.
+    app.restore_session_context_snapshot_if_match();
+    refresh_model_context_window(&mut app, &client).await;
 
     let mut stdout = io::stdout();
     maximize_console_window();
@@ -2006,6 +2088,26 @@ pub async fn run(
                                 ) {
                                     app.push_system(format!("Workspace delete failed: {err}"));
                                     app.set_toast(ToastLevel::Error, "Workspace delete failed");
+                                }
+                            }
+                            _ => {}
+                        }
+                        continue;
+                    }
+
+                    if app.pending_session_delete.is_some() {
+                        match action {
+                            input::InputAction::Quit => app.request_quit(),
+                            input::InputAction::DismissOverlay => {
+                                app.pending_session_delete = None;
+                                app.set_toast(ToastLevel::Info, "Session delete canceled");
+                            }
+                            input::InputAction::NewLine | input::InputAction::Send => {
+                                if let Err(err) =
+                                    confirm_pending_session_delete(&mut app, &manager, &mut session)
+                                {
+                                    app.push_system(format!("Session delete failed: {err}"));
+                                    app.set_toast(ToastLevel::Error, "Session delete failed");
                                 }
                             }
                             _ => {}
@@ -2117,8 +2219,12 @@ pub async fn run(
                                         app.push_system(format!("Command failed: {err}"));
                                         app.set_toast(ToastLevel::Error, "Command failed");
                                     }
+                                    if command_may_change_model_context(&prompt) {
+                                        refresh_model_context_window(&mut app, &client).await;
+                                    }
                                 }
                             } else if app.focus == FocusPane::Workspaces {
+                                let previous_model = app.model.clone();
                                 if let Err(err) = app.activate_sidebar_selection(
                                     &manager,
                                     &mut session,
@@ -2126,6 +2232,9 @@ pub async fn run(
                                 ) {
                                     app.push_system(format!("Sidebar action failed: {err}"));
                                     app.set_toast(ToastLevel::Error, "Sidebar action failed");
+                                }
+                                if app.model != previous_model {
+                                    refresh_model_context_window(&mut app, &client).await;
                                 }
                             } else if app.input.trim_start().starts_with('/')
                                 && !app.input.contains('\n')
@@ -2142,6 +2251,9 @@ pub async fn run(
                                     {
                                         app.push_system(format!("Command failed: {err}"));
                                         app.set_toast(ToastLevel::Error, "Command failed");
+                                    }
+                                    if command_may_change_model_context(&prompt) {
+                                        refresh_model_context_window(&mut app, &client).await;
                                     }
                                 }
                             } else {
@@ -2166,6 +2278,9 @@ pub async fn run(
                                         app.push_system(format!("Command failed: {err}"));
                                         app.set_toast(ToastLevel::Error, "Command failed");
                                     }
+                                    if command_may_change_model_context(&prompt) {
+                                        refresh_model_context_window(&mut app, &client).await;
+                                    }
                                     continue;
                                 }
 
@@ -2179,6 +2294,10 @@ pub async fn run(
                                         "Create or switch to a workspace first",
                                     );
                                     continue;
+                                }
+
+                                if app.model_context_window.is_none() {
+                                    refresh_model_context_window(&mut app, &client).await;
                                 }
 
                                 let image_count = app.pending_images.len();
@@ -2227,6 +2346,8 @@ pub async fn run(
                                 let stream_model = app.model.clone();
                                 let mut streamed_any = false;
                                 let mut captured_tool_calls: Vec<ChatToolCall> = Vec::new();
+                                let mut prompt_eval_count: Option<u32> = None;
+                                let mut eval_count: Option<u32> = None;
 
                                 let stream_result = ollama::chat::chat_stream(
                                     &client,
@@ -2243,6 +2364,12 @@ pub async fn run(
                                         }
                                         if !chunk.tool_calls.is_empty() {
                                             captured_tool_calls.extend(chunk.tool_calls.clone());
+                                        }
+                                        if let Some(value) = chunk.prompt_eval_count {
+                                            prompt_eval_count = Some(value);
+                                        }
+                                        if let Some(value) = chunk.eval_count {
+                                            eval_count = Some(value);
                                         }
                                         app.chat_scroll = AUTO_SCROLL_TARGET;
                                         let _ = terminal.draw(|f| tui::draw(f, &app));
@@ -2279,6 +2406,16 @@ pub async fn run(
                                                 ToastLevel::Error,
                                                 "Failed to save assistant message",
                                             );
+                                        }
+
+                                        if let Some(tokens) = prompt_eval_count {
+                                            app.prompt_tokens_used = Some(tokens);
+                                            app.peak_prompt_tokens = app.peak_prompt_tokens.max(tokens);
+                                            app.persist_active_session_context_snapshot();
+                                        }
+                                        if let Some(tokens) = eval_count {
+                                            app.last_completion_tokens = Some(tokens);
+                                            app.persist_active_session_context_snapshot();
                                         }
 
                                         if !captured_tool_calls.is_empty() {
@@ -2340,6 +2477,9 @@ fn load_conversation_into_app(
     conversation_id: i64,
 ) -> Result<(), Box<dyn std::error::Error>> {
     app.messages.clear();
+    app.prompt_tokens_used = None;
+    app.last_completion_tokens = None;
+    app.peak_prompt_tokens = 0;
     if conversation_id <= 0 {
         return Ok(());
     }
@@ -2355,7 +2495,27 @@ fn load_conversation_into_app(
             app.messages.push(message);
         }
     }
+    app.restore_session_context_snapshot_if_match();
     Ok(())
+}
+
+fn command_may_change_model_context(prompt: &str) -> bool {
+    let trimmed = prompt.trim_start();
+    trimmed == "/model"
+        || trimmed.starts_with("/model ")
+        || trimmed == "/models"
+        || trimmed.starts_with("/models ")
+        || trimmed == "/url"
+        || trimmed.starts_with("/url ")
+}
+
+async fn refresh_model_context_window(app: &mut App, client: &reqwest::Client) {
+    if let Ok(Some(window)) =
+        ollama::models::model_context_window(client, &app.url, &app.model).await
+    {
+        app.model_context_window = Some(window);
+    }
+    app.persist_active_session_context_snapshot();
 }
 
 async fn execute_slash_command(
@@ -2535,6 +2695,62 @@ fn confirm_pending_workspace_delete(
     Ok(())
 }
 
+fn confirm_pending_session_delete(
+    app: &mut App,
+    manager: &WorkspaceManager,
+    session: &mut crate::workspace::WorkspaceSession,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let pending = app.pending_session_delete.clone();
+    let Some(pending_delete) = pending else {
+        return Ok(());
+    };
+
+    if pending_delete.workspace_id <= 0 {
+        app.pending_session_delete = None;
+        return Ok(());
+    }
+
+    let sessions = manager.list_conversations(pending_delete.workspace_id)?;
+    let target = sessions
+        .iter()
+        .find(|conversation| conversation.id == pending_delete.id)
+        .cloned();
+    let Some(target_session) = target else {
+        app.pending_session_delete = None;
+        app.push_system("Session to delete was not found.".to_string());
+        return Ok(());
+    };
+
+    manager.delete_session(target_session.id)?;
+    app.pending_session_delete = None;
+
+    if pending_delete.workspace_id == session.workspace_id
+        && target_session.id == session.conversation_id
+    {
+        let remaining = manager.list_conversations(session.workspace_id)?;
+        if let Some(next_session) = remaining.last() {
+            session.conversation_id = next_session.id;
+            app.active_session_id = next_session.id;
+            app.active_session_title = next_session
+                .title
+                .clone()
+                .unwrap_or_else(|| format!("Session {}", next_session.id));
+            load_conversation_into_app(app, manager, session.conversation_id)?;
+        } else {
+            session.conversation_id = 0;
+            app.active_session_id = 0;
+            app.active_session_title = String::from("No Session");
+            app.messages.clear();
+            app.status = String::from("No session active");
+        }
+    }
+    app.refresh_workspaces(manager)?;
+    app.sync_active_workspace_label(session.workspace_id);
+    app.focus_active_session(session.workspace_id, session.conversation_id);
+    app.set_toast(ToastLevel::Success, "Session deleted");
+    Ok(())
+}
+
 fn workspace_help_text() -> String {
     [
         "Workspace commands:",
@@ -2576,7 +2792,9 @@ fn session_help_text() -> String {
         "- /session switch <id|title>",
         "- /session rename <id> <new title>",
         "- /session rename <title> --to <new title>",
-        "- /session delete [id|title] (defaults to selected/active)",
+        "- /session delete (opens modal for selected session in sidebar)",
+        "- /session delete <id|title> (optional explicit target)",
+        "- Confirm delete modal with Enter, cancel with Esc",
     ]
     .join("\n")
 }
@@ -3009,6 +3227,7 @@ fn handle_command(
                             return Ok(());
                         };
 
+                        app.pending_session_delete = None;
                         app.pending_workspace_delete = Some(PendingWorkspaceDelete {
                             id: target_workspace.id,
                             name: target_workspace.name.clone(),
@@ -3217,80 +3436,83 @@ fn handle_command(
                         }
                     }
                     "delete" => {
-                        let sessions = manager.list_conversations(session.workspace_id)?;
-                        if sessions.is_empty() {
-                            app.push_system("No sessions found in this workspace.".to_string());
-                            return Ok(());
-                        }
-
-                        let selector = if parts.len() >= 3 {
-                            parts[2..].join(" ")
+                        let (target_workspace_id, target, explicit_selector) = if parts.len() >= 3 {
+                            let selector = parts[2..].join(" ");
+                            let sessions = manager.list_conversations(session.workspace_id)?;
+                            let target = if let Ok(id) = selector.trim().parse::<i64>() {
+                                sessions.into_iter().find(|entry| entry.id == id)
+                            } else {
+                                sessions.into_iter().find(|entry| {
+                                    entry
+                                        .title
+                                        .as_deref()
+                                        .map(|title| title.eq_ignore_ascii_case(selector.trim()))
+                                        .unwrap_or(false)
+                                })
+                            };
+                            (
+                                session.workspace_id,
+                                target,
+                                Some(selector.trim().to_string()),
+                            )
                         } else {
-                            let from_selection = match app.sidebar_item() {
+                            let selected_workspace_and_session = match app.sidebar_item() {
                                 Some(SidebarItem::WorkspaceSession(
                                     workspace_index,
                                     session_index,
                                 )) => app.workspaces.get(workspace_index).and_then(|workspace| {
-                                    if workspace.id == session.workspace_id {
-                                        workspace.sessions.get(session_index).map(|entry| entry.id)
-                                    } else {
-                                        None
-                                    }
+                                    workspace
+                                        .sessions
+                                        .get(session_index)
+                                        .map(|entry| (workspace.id, entry.id))
                                 }),
                                 _ => None,
                             };
-                            from_selection
-                                .or_else(|| {
-                                    (app.active_session_id > 0).then_some(app.active_session_id)
-                                })
-                                .map(|id| id.to_string())
-                                .unwrap_or_default()
-                        };
-
-                        if selector.trim().is_empty() {
-                            app.push_system("Usage: /session delete [id|title]".to_string());
-                            return Ok(());
-                        }
-
-                        let target = if let Ok(id) = selector.trim().parse::<i64>() {
-                            sessions.into_iter().find(|entry| entry.id == id)
-                        } else {
-                            sessions.into_iter().find(|entry| {
-                                entry
-                                    .title
-                                    .as_deref()
-                                    .map(|title| title.eq_ignore_ascii_case(selector.trim()))
-                                    .unwrap_or(false)
-                            })
+                            let selected_or_active = selected_workspace_and_session.or_else(|| {
+                                (session.workspace_id > 0 && app.active_session_id > 0)
+                                    .then_some((session.workspace_id, app.active_session_id))
+                            });
+                            let Some((workspace_id, session_id)) = selected_or_active else {
+                                app.push_system(
+                                    "No session selected. Select a session in sidebar, then run `/session delete`."
+                                        .to_string(),
+                                );
+                                return Ok(());
+                            };
+                            let sessions = manager.list_conversations(workspace_id)?;
+                            (
+                                workspace_id,
+                                sessions.into_iter().find(|entry| entry.id == session_id),
+                                None,
+                            )
                         };
                         let Some(target_session) = target else {
-                            app.push_system(format!(
-                                "Session not found: {}. Use `/session list`.",
-                                selector.trim()
-                            ));
+                            if let Some(selector) = explicit_selector {
+                                app.push_system(format!(
+                                    "Session not found: {selector}. Use `/session list`."
+                                ));
+                            } else {
+                                app.push_system(
+                                    "Selected session was not found. Select a session in sidebar, then run `/session delete`."
+                                        .to_string(),
+                                );
+                            }
                             return Ok(());
                         };
-
-                        manager.delete_session(target_session.id)?;
-                        if target_session.id == session.conversation_id {
-                            let remaining = manager.list_conversations(session.workspace_id)?;
-                            if let Some(next_session) = remaining.last() {
-                                session.conversation_id = next_session.id;
-                                app.active_session_id = next_session.id;
-                                app.active_session_title = next_session
-                                    .title
-                                    .clone()
-                                    .unwrap_or_else(|| format!("Session {}", next_session.id));
-                                load_conversation_into_app(app, manager, session.conversation_id)?;
-                            } else {
-                                session.conversation_id = 0;
-                                app.active_session_id = 0;
-                                app.active_session_title = String::from("No Session");
-                                app.messages.clear();
-                                app.status = String::from("No session active");
-                            }
-                        }
-                        app.set_toast(ToastLevel::Success, "Session deleted");
+                        app.pending_workspace_delete = None;
+                        app.pending_session_delete = Some(PendingSessionDelete {
+                            workspace_id: target_workspace_id,
+                            id: target_session.id,
+                            name: target_session
+                                .title
+                                .clone()
+                                .unwrap_or_else(|| format!("Session {}", target_session.id)),
+                            expires_at: Instant::now() + Duration::from_secs(45),
+                        });
+                        app.set_toast(
+                            ToastLevel::Info,
+                            "Delete modal opened (Enter confirm, Esc cancel)",
+                        );
                     }
                     "rename" => {
                         let raw_args = prompt
@@ -3584,10 +3806,10 @@ fn tool_calls_preview(tool_calls: &[ChatToolCall]) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::{
-        autocomplete_suggestions, confirm_pending_workspace_delete, handle_command,
-        is_cloud_model_name, load_ui_state_from_path, next_autocomplete_value,
-        save_ui_state_to_path, App, ModelBucket, SessionEntry, SidebarItem, UiRuntimeState,
-        UiTheme, WorkspaceEntry,
+        autocomplete_suggestions, confirm_pending_session_delete, confirm_pending_workspace_delete,
+        handle_command, is_cloud_model_name, load_ui_state_from_path, next_autocomplete_value,
+        save_ui_state_to_path, App, ModelBucket, SessionContextSnapshot, SessionEntry, SidebarItem,
+        UiRuntimeState, UiTheme, WorkspaceEntry,
     };
     use crate::workspace::{manager::WorkspaceManager, WorkspaceSession};
     use std::{
@@ -3678,6 +3900,28 @@ mod tests {
         app.sidebar_index = target_index;
     }
 
+    fn select_session_in_sidebar(app: &mut App, workspace_id: i64, session_id: i64) {
+        let entries = app.sidebar_entries();
+        let target_index = entries
+            .iter()
+            .position(|entry| match entry {
+                SidebarItem::WorkspaceSession(workspace_index, session_index) => app
+                    .workspaces
+                    .get(*workspace_index)
+                    .and_then(|workspace| {
+                        workspace
+                            .sessions
+                            .get(*session_index)
+                            .map(|session| (workspace.id, session.id))
+                    })
+                    .map(|(wid, sid)| wid == workspace_id && sid == session_id)
+                    .unwrap_or(false),
+                _ => false,
+            })
+            .expect("session should exist in sidebar");
+        app.sidebar_index = target_index;
+    }
+
     fn latest_system_message(app: &App) -> Option<&str> {
         app.messages
             .iter()
@@ -3745,6 +3989,7 @@ mod tests {
         assert_eq!(
             state,
             UiRuntimeState {
+                model: Some(String::from("llama3.2:latest")),
                 theme: UiTheme::EmeraldDusk,
                 models_collapsed: true,
                 cloud_models_collapsed: true,
@@ -3752,6 +3997,7 @@ mod tests {
                 workspaces_collapsed: true,
                 collapsed_workspace_ids: vec![2, 4],
                 sidebar_index: 7,
+                session_context: None,
             }
         );
 
@@ -3768,6 +4014,7 @@ mod tests {
         assert!(next.collapsed_workspace_ids.contains(&4));
         assert_eq!(next.sidebar_index, 7);
         assert_eq!(next.theme, UiTheme::EmeraldDusk);
+        assert_eq!(next.model, "llama3.2:latest");
     }
 
     #[test]
@@ -3779,6 +4026,7 @@ mod tests {
         let root = std::env::temp_dir().join(format!("olly-ui-state-{unique}"));
         let path = root.join("ui_state.json");
         let state = UiRuntimeState {
+            model: Some(String::from("qwen3.5:cloud")),
             theme: UiTheme::SakuraNight,
             models_collapsed: true,
             cloud_models_collapsed: false,
@@ -3786,6 +4034,15 @@ mod tests {
             workspaces_collapsed: false,
             collapsed_workspace_ids: vec![10, 3],
             sidebar_index: 5,
+            session_context: Some(SessionContextSnapshot {
+                workspace_id: 10,
+                session_id: 11,
+                model: String::from("qwen3.5:cloud"),
+                model_context_window: Some(262_144),
+                prompt_tokens_used: Some(4_096),
+                last_completion_tokens: Some(128),
+                peak_prompt_tokens: 4_096,
+            }),
         };
 
         save_ui_state_to_path(&path, &state).expect("save ui state");
@@ -3794,6 +4051,47 @@ mod tests {
 
         let _ = fs::remove_file(&path);
         let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn restore_session_context_snapshot_applies_when_model_and_session_match() {
+        let mut app = App::new(
+            String::from("http://localhost:11434"),
+            String::from("qwen3.5:cloud"),
+        );
+        let state = UiRuntimeState {
+            model: Some(String::from("qwen3.5:cloud")),
+            theme: UiTheme::EmeraldDusk,
+            models_collapsed: false,
+            cloud_models_collapsed: false,
+            local_models_collapsed: false,
+            workspaces_collapsed: false,
+            collapsed_workspace_ids: Vec::new(),
+            sidebar_index: 0,
+            session_context: Some(SessionContextSnapshot {
+                workspace_id: 3,
+                session_id: 9,
+                model: String::from("qwen3.5:cloud"),
+                model_context_window: Some(262_144),
+                prompt_tokens_used: Some(3_210),
+                last_completion_tokens: Some(78),
+                peak_prompt_tokens: 3_210,
+            }),
+        };
+        app.apply_ui_state(state);
+        app.active_workspace_id = 3;
+        app.active_session_id = 9;
+        app.model_context_window = None;
+        app.prompt_tokens_used = None;
+        app.last_completion_tokens = None;
+        app.peak_prompt_tokens = 0;
+
+        app.restore_session_context_snapshot_if_match();
+
+        assert_eq!(app.model_context_window, Some(262_144));
+        assert_eq!(app.prompt_tokens_used, Some(3_210));
+        assert_eq!(app.last_completion_tokens, Some(78));
+        assert_eq!(app.peak_prompt_tokens, 3_210);
     }
 
     #[test]
@@ -3997,7 +4295,7 @@ mod tests {
     }
 
     #[test]
-    fn autocomplete_session_delete_suggests_ids_and_titles() {
+    fn autocomplete_session_delete_suggests_single_command() {
         let models = vec![String::from("llama3.2:latest")];
         let suggestions = autocomplete_suggestions(
             "/session delete ",
@@ -4005,8 +4303,7 @@ mod tests {
             &sample_workspaces(),
             &sample_sessions(),
         );
-        assert!(suggestions.contains(&String::from("/session delete 10")));
-        assert!(suggestions.contains(&String::from("/session delete Refactor")));
+        assert_eq!(suggestions, vec![String::from("/session delete")]);
     }
 
     #[test]
@@ -4125,6 +4422,114 @@ mod tests {
     }
 
     #[test]
+    fn session_delete_uses_sidebar_selection_and_confirmation_flow() {
+        let (root, manager, mut session, mut app) = setup_app_state("session-delete-selection");
+        let target = manager
+            .create_session(session.workspace_id, Some("Delete This Session"))
+            .expect("create target session");
+
+        app.refresh_workspaces(&manager)
+            .expect("refresh workspaces before delete");
+        app.refresh_sessions(&manager, session.workspace_id)
+            .expect("refresh sessions before delete");
+        select_session_in_sidebar(&mut app, session.workspace_id, target);
+
+        handle_command(
+            &mut app,
+            &manager,
+            &mut session,
+            "llama3.2:latest",
+            "/session delete",
+        )
+        .expect("open session delete confirmation");
+        assert_eq!(
+            app.pending_session_delete
+                .as_ref()
+                .map(|pending| pending.id),
+            Some(target)
+        );
+
+        confirm_pending_session_delete(&mut app, &manager, &mut session).expect("confirm delete");
+        assert!(app.pending_session_delete.is_none());
+        assert!(!manager
+            .list_conversations(session.workspace_id)
+            .expect("list sessions after delete")
+            .iter()
+            .any(|conversation| conversation.id == target));
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn session_delete_targets_sidebar_selection_from_other_workspace() {
+        let (root, manager, mut session, mut app) =
+            setup_app_state("session-delete-selection-cross-workspace");
+        let original_workspace_id = session.workspace_id;
+        let original_session_id = session.conversation_id;
+
+        let other_root = root.join("other-workspace-root");
+        fs::create_dir_all(&other_root).expect("create other workspace root");
+        let other_workspace = manager
+            .create_workspace(
+                "Delete Target Workspace",
+                "llama3.2:latest",
+                Some(&other_root),
+            )
+            .expect("create other workspace");
+
+        app.refresh_workspaces(&manager)
+            .expect("refresh workspaces before cross-workspace delete");
+        app.refresh_sessions(&manager, session.workspace_id)
+            .expect("refresh active workspace sessions before cross-workspace delete");
+        select_session_in_sidebar(
+            &mut app,
+            other_workspace.workspace_id,
+            other_workspace.conversation_id,
+        );
+
+        handle_command(
+            &mut app,
+            &manager,
+            &mut session,
+            "llama3.2:latest",
+            "/session delete",
+        )
+        .expect("open cross-workspace session delete confirmation");
+        assert_eq!(
+            app.pending_session_delete
+                .as_ref()
+                .map(|pending| (pending.workspace_id, pending.id)),
+            Some((
+                other_workspace.workspace_id,
+                other_workspace.conversation_id
+            ))
+        );
+
+        confirm_pending_session_delete(&mut app, &manager, &mut session)
+            .expect("confirm cross-workspace delete");
+
+        assert_eq!(session.workspace_id, original_workspace_id);
+        assert_eq!(session.conversation_id, original_session_id);
+        assert_eq!(app.active_workspace_id, original_workspace_id);
+        assert_eq!(app.active_session_id, original_session_id);
+        assert!(!manager
+            .list_conversations(other_workspace.workspace_id)
+            .expect("list conversations in other workspace after delete")
+            .iter()
+            .any(|conversation| conversation.id == other_workspace.conversation_id));
+        assert!(!app
+            .workspaces
+            .iter()
+            .find(|workspace| workspace.id == other_workspace.workspace_id)
+            .expect("other workspace should remain")
+            .sessions
+            .iter()
+            .any(|entry| entry.id == other_workspace.conversation_id));
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
     fn session_create_sets_active_session_and_loads_empty_messages() {
         let (root, manager, mut session, mut app) = setup_app_state("session-create-active");
         let previous = session.conversation_id;
@@ -4168,7 +4573,15 @@ mod tests {
             "llama3.2:latest",
             &format!("/session delete {secondary}"),
         )
-        .expect("delete secondary session");
+        .expect("open secondary delete modal");
+        assert_eq!(
+            app.pending_session_delete
+                .as_ref()
+                .map(|pending| pending.id),
+            Some(secondary)
+        );
+        confirm_pending_session_delete(&mut app, &manager, &mut session)
+            .expect("confirm secondary delete");
 
         assert_eq!(session.conversation_id, main_session);
         assert_eq!(app.active_session_id, main_session);
@@ -4180,7 +4593,15 @@ mod tests {
             "llama3.2:latest",
             &format!("/session delete {main_session}"),
         )
-        .expect("delete final session");
+        .expect("open final delete modal");
+        assert_eq!(
+            app.pending_session_delete
+                .as_ref()
+                .map(|pending| pending.id),
+            Some(main_session)
+        );
+        confirm_pending_session_delete(&mut app, &manager, &mut session)
+            .expect("confirm final delete");
 
         assert_eq!(session.conversation_id, 0);
         assert_eq!(app.active_session_id, 0);

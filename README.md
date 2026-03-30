@@ -15,6 +15,8 @@ Olly is a Rust terminal UI client for Ollama. It focuses on a fast chat loop for
 - Slash-command power features (`/search`, `/export`, `/checkpoint`, `/workspace`, `/session`, `/attach`, `/model`, `/url`).
 - Configurable keybindings and runtime Ollama URL.
 - Improved Windows console stability: startup sizing is normalized and resize handling avoids native scrollbar/layout glitches.
+- Per-session footer telemetry including context usage (`ctx:used/max`) against model context window.
+- Footer context telemetry is restored across app restarts for the same session/model context.
 
 ## Installation
 
@@ -108,6 +110,8 @@ switch_focus = "Tab"
 autocomplete = "Tab"
 ```
 
+`defaults.model` is the startup fallback model. Olly also persists your last active model/session UI state; passing `--model` on launch overrides both.
+
 ## Keyboard Shortcuts
 
 - `Ctrl+Enter`: send message
@@ -152,7 +156,9 @@ autocomplete = "Tab"
 - `/session switch <id|title>` switch current session
 - `/session rename <id> <new title>` rename a session by id
 - `/session rename <title> --to <new title>` rename a session by current title
-- `/session delete [id|title]` delete selected/active session (or explicit target)
+- `/session delete` open delete modal for the selected session in sidebar (or active one)
+- `/session delete <id|title>` optional explicit delete target
+- `Enter` confirms session delete modal, `Esc` cancels it
 - `/attach <image_path>` queue image attachment(s)
 - `/clear-attachments` clear queued attachments
 - `/model <name>` switch active model

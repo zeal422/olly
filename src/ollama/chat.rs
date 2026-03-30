@@ -50,6 +50,8 @@ struct ChatRequest<'a> {
 struct ChatResponse {
     message: Option<ChatMessage>,
     done: Option<bool>,
+    prompt_eval_count: Option<u32>,
+    eval_count: Option<u32>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -57,6 +59,8 @@ pub struct ParsedStreamChunk {
     pub content: String,
     pub done: bool,
     pub tool_calls: Vec<ChatToolCall>,
+    pub prompt_eval_count: Option<u32>,
+    pub eval_count: Option<u32>,
 }
 
 pub fn parse_stream_line(line: &str) -> Result<Option<ParsedStreamChunk>, OllamaError> {
@@ -74,6 +78,8 @@ pub fn parse_stream_line(line: &str) -> Result<Option<ParsedStreamChunk>, Ollama
         content,
         done: parsed.done.unwrap_or(false),
         tool_calls,
+        prompt_eval_count: parsed.prompt_eval_count,
+        eval_count: parsed.eval_count,
     }))
 }
 

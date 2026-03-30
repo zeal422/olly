@@ -589,6 +589,28 @@ pub fn draw(frame: &mut Frame<'_>, app: &App) {
         );
     }
 
+    if let Some(pending_delete) = &app.pending_session_delete {
+        let area = centered_rect(58, 28, frame.area());
+        frame.render_widget(Clear, area);
+        let body = format!(
+            "Delete session?\n\n{}\n\nEnter = confirm    Esc = cancel",
+            pending_delete.name
+        );
+        frame.render_widget(
+            Paragraph::new(body)
+                .style(Style::default().fg(palette.modal_fg).bg(palette.modal_bg))
+                .block(
+                    Block::default()
+                        .title("Confirm Delete")
+                        .borders(Borders::ALL)
+                        .style(Style::default().fg(palette.modal_border)),
+                )
+                .alignment(Alignment::Center)
+                .wrap(Wrap { trim: true }),
+            area,
+        );
+    }
+
     render_theme_picker_modal(frame, app, palette);
 }
 
@@ -938,11 +960,17 @@ fn render_chat_panel(frame: &mut Frame<'_>, app: &App, area: Rect, palette: Them
         .workspace_root_path
         .as_deref()
         .unwrap_or("(path not set)");
+    let context_usage = format!(
+        "ctx:{}/{}",
+        token_label(app.prompt_tokens_used),
+        token_label(app.model_context_window)
+    );
     let context_line = format!(
-        "session:{}#{} | msgs:{} | ws:{} | path:{}",
+        "session:{}#{} | msgs:{} | {} | ws:{} | path:{}",
         app.active_session_title,
         app.active_session_id,
         app.messages.len(),
+        context_usage,
         app.workspace_name,
         truncate_middle(path, 28)
     );
@@ -1545,6 +1573,20 @@ fn truncate_end(value: &str, max_chars: usize) -> String {
         return ".".repeat(max_chars);
     }
     chars.into_iter().take(max_chars - 3).collect::<String>() + "..."
+}
+
+fn token_label(value: Option<u32>) -> String {
+    value.map(format_tokens).unwrap_or_else(|| "?".to_string())
+}
+
+fn format_tokens(value: u32) -> String {
+    if value >= 1_000_000 {
+        format!("{:.1}m", value as f64 / 1_000_000.0)
+    } else if value >= 1_000 {
+        format!("{:.1}k", value as f64 / 1_000.0)
+    } else {
+        value.to_string()
+    }
 }
 
 fn sidebar_line_with_marquee(

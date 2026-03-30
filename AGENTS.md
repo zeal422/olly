@@ -15,6 +15,8 @@
 - Configurable keybindings and runtime Ollama URL
 - 8 built-in UI themes with live preview
 - Hardened Windows console startup/resize behavior to reduce native scrollbar and layout artifacts
+- Per-session footer context telemetry (`ctx:used/max`) based on Ollama usage/model-window metadata
+- Session/model footer context telemetry restoration across app restarts via persisted UI runtime state
 
 ### Architecture
 
@@ -211,7 +213,7 @@ autocomplete = "Tab"
 - `/export json|md <path>` - Export conversation
 - `/checkpoint save|restore <name>` - Checkpoint management
 - `/workspace list|switch|create|rename|delete` - Workspace operations
-- `/session list|new|switch|rename|delete` - Session operations
+- `/session list|new|switch|rename|delete` - Session operations (`/session delete` opens confirm modal for selected sidebar session by default; optional explicit `<id|title>` target supported)
 - `/attach <image_path>` - Queue image attachment
 - `/clear-attachments` - Clear queued attachments
 - `/model <name>` - Switch active model

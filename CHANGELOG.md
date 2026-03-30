@@ -4,6 +4,22 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project follows Semantic Versioning.
 
+## [0.0.8] - 2026-03-30
+
+### Added
+- Session context usage tracking in the chat footer (`ctx:<used>/<max>`) so each active session shows real token budget progress against the model context window.
+- Context-window metadata fetch/parsing support from Ollama model details, including robust fallbacks when provider metadata is incomplete.
+
+### Fixed
+- Session deletion UX now opens a confirmation modal for `/session delete` (Enter confirm, Esc cancel), matching workspace deletion safety behavior.
+- `/session delete` now defaults to the sidebar-selected session target (with active-session fallback only when nothing is selected), reducing accidental deletes and command ambiguity.
+- Fixed footer context usage restore after app restart so `ctx:<used>/<max>` no longer drops to `?` in matching session/model startup paths.
+
+### Modified
+- `/session delete` autocomplete now stays focused on the single modal-driven command flow instead of emitting multiple delete variants.
+- Session-delete post-confirm refresh now updates workspace/session sidebar state immediately so deleted sessions disappear consistently from navigation.
+- UI runtime state now persists active model and per-session context telemetry snapshot to keep footer context usage stable across restarts (`--model` CLI override still takes precedence).
+
 ## [0.0.7] - 2026-03-29
 
 ### Added
