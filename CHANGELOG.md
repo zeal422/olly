@@ -4,6 +4,45 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project follows Semantic Versioning.
 
+## [0.0.11] - 2026-03-30
+
+### Added
+- **Tool execution system** for coding workflows with Ollama models:
+  - Built-in tools: `read_file`, `list_dir`, `grep_search`, `find_by_name`, `execute_command`
+  - Tool registry with JSON schema definitions for Ollama API
+  - Safety sandbox: workspace boundary enforcement for all file operations
+  - Command allowlist: only `cargo`, `git`, `rg`, `python`, `node` permitted
+  - Command denylist: blocks dangerous patterns (`rm`, `dd`, `sudo`, `mkfs`, force-push, etc.)
+  - Confirmation modal flow: Enter to confirm, Esc to cancel when `policy=confirm`
+  - Footer telemetry: shows `tools:on/off` and `policy:auto/confirm` in status bar
+  - Compact chat notices for tool execution start/end
+  - Max 4 tool steps per conversation turn to prevent runaway execution
+  - Output truncation with `[truncated]` markers for large outputs
+- `/tools` command group for tool management:
+  - `/tools` - show status and available commands
+  - `/tools enable|on` / `/tools disable|off` - toggle tool execution
+  - `/tools policy auto|confirm` - set execution policy
+  - `/tools list` - list available tools
+  - `/tools allow <tool>` / `/tools deny <tool>` - manage allow/deny lists
+  - `/tools reset` - clear allow/deny lists
+- Tool settings persistence in UI runtime state (backward compatible with old state files)
+- Integration tests for tool execution: `tools_executor`, `tools_command`, `tools_loop`, `tools_registry`
+- Overlay routing tests for tool confirmation modal
+- Tool safety regression tests for:
+  - command-token hardening (`git.evil` rejection, path-like executable rejection)
+  - recursive traversal boundary enforcement against symlink/junction escape paths
+
+### Security
+- Tools are **disabled by default** and require explicit enablement
+- All file operations are sandboxed to the workspace root
+- Command execution has strict allowlist/denylist controls
+- Confirmation modal prevents accidental tool execution when policy is set to `confirm`
+- Hardened executable-token validation for `execute_command`:
+  - rejects path-like executable tokens (`/`, `\`, leading `.`)
+  - allows only exact allowlist roots (or immediate ASCII-digit suffix variants)
+  - strips only known executable wrappers (`.exe`, `.cmd`, `.bat`)
+  - rejects permissive dotted suffix forms like `git.evil`
+
 ## [0.0.10] - 2026-03-30
 
 ### Added

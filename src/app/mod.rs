@@ -6,6 +6,7 @@ pub mod domain;
 pub mod input;
 pub mod platform;
 pub mod runtime;
+pub mod tools;
 pub mod tui;
 
 use std::{
@@ -19,6 +20,7 @@ use chrono::Local;
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    app::tools::ToolsState,
     config::AppConfig,
     history,
     ollama::{
@@ -41,6 +43,7 @@ pub(crate) const COMMAND_SUGGESTIONS: &[&str] = &[
     "/clear-attachments",
     "/model",
     "/url",
+    "/tools",
 ];
 pub(crate) const AUTO_SCROLL_TARGET: u16 = 30_000;
 
@@ -136,6 +139,17 @@ pub struct PendingSessionDelete {
     pub expires_at: Instant,
 }
 
+/// Pending tool confirmation for policy=confirm mode
+#[derive(Debug, Clone)]
+pub struct PendingToolConfirmation {
+    pub tool_call_id: String,
+    pub tool_name: String,
+    pub tool_args: String,
+    pub expires_at: Instant,
+    pub step: usize,
+    pub total_steps: usize,
+}
+
 #[derive(Debug, Clone)]
 pub struct WorkspaceEntry {
     pub id: i64,
@@ -157,6 +171,7 @@ pub struct Message {
     pub timestamp: String,
     pub image_count: usize,
     pub tool_calls_preview: Option<String>,
+    pub tool_name: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
@@ -183,6 +198,7 @@ pub(crate) struct UiRuntimeState {
     collapsed_workspace_ids: Vec<i64>,
     sidebar_index: usize,
     session_context: Option<SessionContextSnapshot>,
+    tools_state: ToolsState,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -229,6 +245,8 @@ pub struct App {
     pub pending_session_delete: Option<PendingSessionDelete>,
     pub theme: UiTheme,
     pub theme_picker: Option<ThemePickerState>,
+    pub tools_state: ToolsState,
+    pub pending_tool_confirmation: Option<PendingToolConfirmation>,
     pub command_suggestion_index: usize,
     pub input_cursor_char_index: usize,
     pub input_cursor_preferred_column: Option<usize>,
@@ -302,6 +320,8 @@ impl App {
             pending_session_delete: None,
             theme: UiTheme::default(),
             theme_picker: None,
+            tools_state: ToolsState::default(),
+            pending_tool_confirmation: None,
             command_suggestion_index: 0,
             input_cursor_char_index: 0,
             input_cursor_preferred_column: None,
@@ -364,6 +384,7 @@ impl App {
             collapsed_workspace_ids,
             sidebar_index: self.sidebar_index,
             session_context: self.capture_active_session_context_snapshot(),
+            tools_state: self.tools_state.clone(),
         }
     }
 
@@ -378,6 +399,7 @@ impl App {
             collapsed_workspace_ids,
             sidebar_index,
             session_context,
+            tools_state,
         } = state;
         if let Some(saved_model) = model {
             if !saved_model.trim().is_empty() {
@@ -392,6 +414,7 @@ impl App {
         self.collapsed_workspace_ids = collapsed_workspace_ids.into_iter().collect();
         self.sidebar_index = sidebar_index;
         self.restored_session_context = session_context;
+        self.tools_state = tools_state;
     }
 
     fn capture_active_session_context_snapshot(&self) -> Option<SessionContextSnapshot> {
@@ -446,6 +469,11 @@ impl App {
                 self.pending_session_delete = None;
             }
         }
+        if let Some(pending_tool) = &self.pending_tool_confirmation {
+            if Instant::now() > pending_tool.expires_at {
+                self.pending_tool_confirmation = None;
+            }
+        }
     }
 
     fn now_label() -> String {
@@ -485,6 +513,7 @@ impl App {
             timestamp: Self::now_label(),
             image_count,
             tool_calls_preview,
+            tool_name: None,
         });
         self.chat_scroll = AUTO_SCROLL_TARGET;
     }
@@ -497,12 +526,37 @@ impl App {
         self.push_message("Assistant", content, 0, tool_calls_preview);
     }
 
-    pub(crate) fn push_tool(&mut self, content: String, tool_calls_preview: Option<String>) {
-        self.push_message("Tool", content, 0, tool_calls_preview);
+    pub(crate) fn push_tool(&mut self, content: String, tool_name: Option<String>) {
+        let tool_calls_preview = tool_name.as_ref().map(|name| format!("Tool: {}", name));
+        self.messages.push(Message {
+            role: "Tool".to_string(),
+            content,
+            timestamp: Self::now_label(),
+            image_count: 0,
+            tool_calls_preview,
+            tool_name,
+        });
+        self.chat_scroll = AUTO_SCROLL_TARGET;
     }
 
     pub(crate) fn push_system(&mut self, content: String) {
         self.push_message("System", content, 0, None);
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn push_tool_notice(&mut self, tool_name: &str, step: usize, total_steps: usize) {
+        let message = format!(
+            "Executing tool: {} (step {}/{})...",
+            tool_name, step, total_steps
+        );
+        self.push_system(message);
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn push_tool_result_notice(&mut self, tool_name: &str, success: bool, step: usize) {
+        let status = if success { "completed" } else { "failed" };
+        let message = format!("Tool {}: {} (step {})", tool_name, status, step);
+        self.push_system(message);
     }
 
     pub(crate) fn set_toast(&mut self, level: ToastLevel, message: impl Into<String>) {
@@ -750,7 +804,14 @@ impl App {
                     "Tool" => "tool",
                     _ => return None,
                 };
-                Some(ChatMessage::new(role, m.content.clone()))
+                if role == "tool" {
+                    Some(ChatMessage::new_tool(
+                        m.tool_name.clone().unwrap_or_else(|| "unknown".to_string()),
+                        m.content.clone(),
+                    ))
+                } else {
+                    Some(ChatMessage::new(role, m.content.clone()))
+                }
             })
             .collect()
     }
@@ -774,16 +835,28 @@ impl App {
             .and_then(|raw| serde_json::from_str::<Vec<String>>(raw).ok())
             .map(|v| v.len())
             .unwrap_or(0);
-        let tool_preview = tool_calls
+        let parsed_tool_calls = tool_calls
             .as_ref()
-            .and_then(|raw| serde_json::from_str::<Vec<ChatToolCall>>(raw).ok())
-            .and_then(|calls| tool_calls_preview(&calls));
+            .and_then(|raw| serde_json::from_str::<Vec<ChatToolCall>>(raw).ok());
+        let tool_preview = parsed_tool_calls
+            .as_ref()
+            .and_then(|calls| tool_calls_preview(calls));
+        let tool_name = if role == "tool" {
+            parsed_tool_calls
+                .as_ref()
+                .and_then(|calls| calls.first())
+                .and_then(|call| call.function.as_ref())
+                .map(|function| function.name.clone())
+        } else {
+            None
+        };
         Some(Message {
             role: display_role.to_string(),
             content,
             timestamp: Self::normalize_storage_timestamp(&timestamp),
             image_count,
             tool_calls_preview: tool_preview,
+            tool_name,
         })
     }
 
@@ -1552,24 +1625,6 @@ pub(crate) fn handle_command(
 
     Ok(())
 }
-pub(crate) fn format_tool_calls(tool_calls: &[ChatToolCall]) -> String {
-    if tool_calls.is_empty() {
-        return String::from("Tool calls: (none)");
-    }
-    tool_calls
-        .iter()
-        .enumerate()
-        .map(|(index, call)| {
-            if let Some(function) = &call.function {
-                format!("{}. {}({})", index + 1, function.name, function.arguments)
-            } else {
-                format!("{}. <unknown tool call>", index + 1)
-            }
-        })
-        .collect::<Vec<_>>()
-        .join("\n")
-}
-
 pub(crate) fn tool_calls_preview(tool_calls: &[ChatToolCall]) -> Option<String> {
     if tool_calls.is_empty() {
         return None;

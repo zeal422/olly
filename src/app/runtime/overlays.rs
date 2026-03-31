@@ -79,6 +79,25 @@ pub(crate) fn handle_overlay_action(
         return Ok(true);
     }
 
+    // Tool confirmation modal handling
+    if app.pending_tool_confirmation.is_some() {
+        match action {
+            crate::app::input::InputAction::Quit => app.request_quit(),
+            crate::app::input::InputAction::DismissOverlay => {
+                app.pending_tool_confirmation = None;
+                app.set_toast(ToastLevel::Info, "Tool execution canceled");
+            }
+            crate::app::input::InputAction::NewLine | crate::app::input::InputAction::Send => {
+                // Confirm and proceed with tool execution
+                // The actual execution will be handled by the chat_pipeline
+                // Just clear the modal here and let the loop continue
+                app.pending_tool_confirmation = None;
+            }
+            _ => {}
+        }
+        return Ok(true);
+    }
+
     Ok(false)
 }
 
@@ -177,5 +196,98 @@ mod tests {
         .expect("overlay handling succeeds");
 
         assert!(!consumed);
+    }
+
+    #[test]
+    fn tool_confirmation_overlay_consumes_actions() {
+        let (manager, mut session) = setup_manager_and_session("tool-confirmation-overlay");
+        let mut app = App::new(
+            String::from("http://localhost:11434"),
+            String::from("llama3.2:latest"),
+        );
+        use crate::app::PendingToolConfirmation;
+        app.pending_tool_confirmation = Some(PendingToolConfirmation {
+            tool_call_id: String::from("test-call-id"),
+            tool_name: String::from("execute_command"),
+            tool_args: String::from("{\"command\": \"git status\"}"),
+            expires_at: Instant::now() + Duration::from_secs(30),
+            step: 1,
+            total_steps: 3,
+        });
+
+        // Test that keypress is consumed
+        let consumed = super::handle_overlay_action(
+            &mut app,
+            InputAction::Insert('x'),
+            &manager,
+            &mut session,
+            "llama3.2:latest",
+        )
+        .expect("overlay handling succeeds");
+
+        assert!(consumed);
+        // Modal should still be open (not dismissed by random key)
+        assert!(app.pending_tool_confirmation.is_some());
+    }
+
+    #[test]
+    fn dismiss_tool_confirmation_overlay_clears_modal() {
+        let (manager, mut session) = setup_manager_and_session("tool-confirmation-dismiss");
+        let mut app = App::new(
+            String::from("http://localhost:11434"),
+            String::from("llama3.2:latest"),
+        );
+        use crate::app::PendingToolConfirmation;
+        app.pending_tool_confirmation = Some(PendingToolConfirmation {
+            tool_call_id: String::from("test-call-id"),
+            tool_name: String::from("execute_command"),
+            tool_args: String::from("{\"command\": \"git status\"}"),
+            expires_at: Instant::now() + Duration::from_secs(30),
+            step: 1,
+            total_steps: 3,
+        });
+
+        let consumed = super::handle_overlay_action(
+            &mut app,
+            InputAction::DismissOverlay,
+            &manager,
+            &mut session,
+            "llama3.2:latest",
+        )
+        .expect("overlay handling succeeds");
+
+        assert!(consumed);
+        assert!(app.pending_tool_confirmation.is_none());
+    }
+
+    #[test]
+    fn confirm_tool_execution_on_enter() {
+        let (manager, mut session) = setup_manager_and_session("tool-confirmation-confirm");
+        let mut app = App::new(
+            String::from("http://localhost:11434"),
+            String::from("llama3.2:latest"),
+        );
+        use crate::app::PendingToolConfirmation;
+        app.pending_tool_confirmation = Some(PendingToolConfirmation {
+            tool_call_id: String::from("test-call-id"),
+            tool_name: String::from("execute_command"),
+            tool_args: String::from("{\"command\": \"git status\"}"),
+            expires_at: Instant::now() + Duration::from_secs(30),
+            step: 1,
+            total_steps: 3,
+        });
+
+        // Pressing Enter confirms and clears the modal
+        let consumed = super::handle_overlay_action(
+            &mut app,
+            InputAction::NewLine,
+            &manager,
+            &mut session,
+            "llama3.2:latest",
+        )
+        .expect("overlay handling succeeds");
+
+        assert!(consumed);
+        assert!(app.pending_tool_confirmation.is_none());
     }
 }

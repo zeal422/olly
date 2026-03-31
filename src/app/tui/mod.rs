@@ -561,6 +561,7 @@ pub fn draw(frame: &mut Frame<'_>, app: &App) {
     modals::render_workspace_delete_modal(frame, app, palette);
     modals::render_session_delete_modal(frame, app, palette);
     modals::render_theme_picker_modal(frame, app, palette);
+    modals::render_tool_confirmation_modal(frame, app, palette);
 }
 
 fn render_status_bar(frame: &mut Frame<'_>, app: &App, area: Rect, palette: ThemePalette) {
@@ -579,12 +580,17 @@ fn render_status_bar(frame: &mut Frame<'_>, app: &App, area: Rect, palette: Them
     } else {
         "hl:off"
     };
+    let tools_status = if app.tools_state.enabled {
+        format!("tools:on/{}", app.tools_state.policy.as_str())
+    } else {
+        "tools:off".to_string()
+    };
     let workspace_path = app
         .workspace_root_path
         .as_deref()
         .unwrap_or("(path not set)");
     let status = format!(
-        "{spinner} ws={} | path={} | session={}#{} | msgs={} | model={} | conn={} | imgs={} | {hl_mode} | {} | F1 help",
+        "{spinner} ws={} | path={} | session={}#{} | msgs={} | model={} | conn={} | imgs={} | {hl_mode} | {} | {} | F1 help",
         app.workspace_name,
         truncate_middle(workspace_path, 36),
         app.active_session_title,
@@ -593,6 +599,7 @@ fn render_status_bar(frame: &mut Frame<'_>, app: &App, area: Rect, palette: Them
         app.model,
         connection,
         app.pending_images.len(),
+        tools_status,
         app.status
     );
     frame.render_widget(

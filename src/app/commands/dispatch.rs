@@ -12,6 +12,7 @@ pub enum CommandRoute {
     ClearAttachments,
     Model,
     Url,
+    Tools,
     Unknown,
 }
 
@@ -29,6 +30,7 @@ pub fn route_command(root: &str) -> CommandRoute {
         "/clear-attachments" => CommandRoute::ClearAttachments,
         "/model" => CommandRoute::Model,
         "/url" => CommandRoute::Url,
+        "/tools" => CommandRoute::Tools,
         _ => CommandRoute::Unknown,
     }
 }
@@ -43,6 +45,11 @@ mod tests {
         assert_eq!(route_command("/workspace"), CommandRoute::Workspace);
         assert_eq!(route_command("/session"), CommandRoute::Session);
         assert_eq!(route_command("/url"), CommandRoute::Url);
+    }
+
+    #[test]
+    fn route_command_maps_tools() {
+        assert_eq!(route_command("/tools"), CommandRoute::Tools);
     }
 
     #[test]

@@ -8,11 +8,12 @@ Olly is a Rust terminal UI client for Ollama. It focuses on a fast chat loop for
 
 - Streaming chat with live token rendering.
 - Model listing and quick model switching.
+- **Tool execution for coding workflows** (read_file, list_dir, grep_search, find_by_name, execute_command with safety restrictions).
 - Workspace and per-workspace session persistence with SQLite.
 - Full-text search over stored messages.
 - File-context ingestion with safety guardrails.
 - Markdown rendering with optional syntax highlighting.
-- Slash-command power features (`/search`, `/export`, `/checkpoint`, `/workspace`, `/session`, `/attach`, `/model`, `/url`).
+- Slash-command power features (`/search`, `/export`, `/checkpoint`, `/workspace`, `/session`, `/attach`, `/model`, `/url`, `/tools`).
 - Configurable keybindings and runtime Ollama URL.
 - Improved Windows console stability: startup sizing is normalized and resize handling avoids native scrollbar/layout glitches.
 - Per-session footer telemetry including context usage (`ctx:used/max`) against model context window.
@@ -176,6 +177,30 @@ autocomplete = "Tab"
 - `/clear-attachments` clear queued attachments
 - `/model <name>` switch active model
 - `/url <http://host:port>` update Ollama URL for current session
+- `/tools` show tools status and available commands
+- `/tools enable` | `/tools on` enable tool execution
+- `/tools disable` | `/tools off` disable tool execution
+- `/tools policy auto` set policy to auto-execute (use with caution)
+- `/tools policy confirm` set policy to confirm before executing
+- `/tools list` list available tools
+- `/tools allow <tool>` add tool to allowlist
+- `/tools deny <tool>` add tool to denylist
+- `/tools reset` clear allowlist and denylist
+
+### Tool Safety
+
+- **Disabled by default**: Tools must be explicitly enabled with `/tools enable`.
+- **Workspace sandbox**: All file operations are restricted to the current workspace root.
+- **Command allowlist**: Only `cargo`, `git`, `rg`, `python`, and `node` commands are permitted.
+- **Executable token hardening**:
+  - path-like executable tokens are rejected (`/`, `\`, or leading `.` in command token)
+  - only exact allowlist roots or immediate ASCII-digit variants are accepted (for example `python3`, `node18`)
+  - only known wrapper suffixes are normalized (`.exe`, `.cmd`, `.bat`)
+  - dotted-suffix bypass forms like `git.evil` are rejected
+- **Command denylist**: Dangerous patterns like `rm`, `dd`, `mkfs`, `sudo`, force-push are blocked.
+- **Confirmation modal**: When `policy=confirm`, a modal appears for each tool call (Enter=execute, Esc=cancel).
+- **Max steps**: Tool loops are capped at 4 steps to prevent runaway execution.
+- **Output limits**: Large outputs are truncated with `[truncated]` markers.
 
 ## Troubleshooting
 

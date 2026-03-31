@@ -2,8 +2,8 @@ pub(super) use super::super::{
     apply_saved_ui_state_with_startup_precedence, autocomplete_suggestions, handle_command,
     is_cloud_model_name, load_ui_state_from_path, models_help_text, next_autocomplete_value,
     save_ui_state_to_path, session_help_text, workspace_help_text, App, FocusPane, Message,
-    ModelBucket, SessionContextSnapshot, SessionEntry, SidebarItem, UiRuntimeState, UiTheme,
-    WorkspaceEntry,
+    ModelBucket, SessionContextSnapshot, SessionEntry, SidebarItem, ToolsState, UiRuntimeState,
+    UiTheme, WorkspaceEntry,
 };
 pub(super) use crate::workspace::{manager::WorkspaceManager, WorkspaceSession};
 pub(super) use std::{

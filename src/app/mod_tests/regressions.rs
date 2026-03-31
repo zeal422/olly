@@ -95,3 +95,40 @@ fn models_help_text_snapshot_stable() {
     .join("\n");
     assert_eq!(models_help_text(), expected);
 }
+
+#[test]
+fn tool_message_replay_preserves_tool_name_and_full_content() {
+    let mut app = App::new(
+        String::from("http://localhost:11434"),
+        String::from("llama3.2:latest"),
+    );
+    let full_content = "x".repeat(512);
+    app.push_tool(full_content.clone(), Some(String::from("execute_command")));
+
+    let ollama_messages = app.to_ollama_messages();
+    let tool_message = ollama_messages
+        .iter()
+        .find(|message| message.role == "tool")
+        .expect("tool message should exist");
+
+    assert_eq!(tool_message.tool_name.as_deref(), Some("execute_command"));
+    assert_eq!(tool_message.content, full_content);
+}
+
+#[test]
+fn tool_message_header_preview_includes_tool_name() {
+    let mut app = App::new(
+        String::from("http://localhost:11434"),
+        String::from("llama3.2:latest"),
+    );
+    app.push_tool(
+        String::from("tool output"),
+        Some(String::from("grep_search")),
+    );
+
+    let message = app.messages.last().expect("tool message");
+    assert_eq!(
+        message.tool_calls_preview.as_deref(),
+        Some("Tool: grep_search")
+    );
+}

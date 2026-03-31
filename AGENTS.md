@@ -7,11 +7,12 @@
 ### Core Features
 - Streaming chat with live token rendering
 - Model listing and switching (local + cloud models)
+- **Tool execution system** with confirmation modals, policy controls (auto/confirm), and safety sandbox
 - Workspace and per-workspace session persistence with SQLite
 - Full-text search over stored messages
 - File-context ingestion with safety guardrails
 - Markdown rendering with optional syntax highlighting
-- Extensive slash-command system (`/search`, `/export`, `/checkpoint`, `/workspace`, `/session`, `/attach`, `/model`, `/url`, `/themes`)
+- Extensive slash-command system (`/search`, `/export`, `/checkpoint`, `/workspace`, `/session`, `/attach`, `/model`, `/url`, `/themes`, `/tools`)
 - Configurable keybindings and runtime Ollama URL
 - 8 built-in UI themes with live preview
 - Hardened Windows console startup/resize behavior to reduce native scrollbar and layout artifacts
@@ -36,6 +37,7 @@ src/
 |   |-- autocomplete/        # Command suggestion providers
 |   |-- domain/              # Workspace/session transition helpers
 |   |-- chat_pipeline.rs     # Send + stream + persistence pipeline
+|   |-- tools/                 # Tool registry, executor, and safety controls
 |   |-- mod_tests/           # App-level unit tests extracted from mod.rs
 |   `-- tui/                 # Terminal UI rendering components
 |-- config/                  # Configuration management (config.toml, platform paths)
@@ -181,6 +183,7 @@ autocomplete = "Tab"
   - `workspace_*` - Workspace/session management
   - `config_*` - Configuration handling
   - `ollama_*` - Ollama client behavior
+  - `tools_*` - Tool execution, registry, safety controls
   - `smoke_*` - Boot and basic functionality
 
 ### Commit Guidelines
@@ -224,6 +227,19 @@ autocomplete = "Tab"
 - `/clear-attachments` - Clear queued attachments
 - `/model <name>` - Switch active model
 - `/url <http://host:port>` - Update Ollama URL
+- `/tools` - Show tools status and available commands
+- `/tools enable|on` - Enable tool execution
+- `/tools disable|off` - Disable tool execution
+- `/tools policy auto|confirm` - Set tool execution policy
+- `/tools list` - List available tools
+- `/tools allow <tool>` - Add tool to allowlist
+- `/tools deny <tool>` - Add tool to denylist
+- `/tools reset` - Clear allowlist and denylist
+- Tool command safety details:
+  - `execute_command` rejects path-like executable tokens (`/`, `\`, or leading `.`)
+  - executable token validation allows exact allowlist roots plus immediate ASCII-digit variants
+  - only `.exe`, `.cmd`, and `.bat` wrapper suffixes are normalized
+  - dotted suffix forms like `git.evil` are rejected
 
 ## Project Structure Summary
 
@@ -236,6 +252,7 @@ autocomplete = "Tab"
 | `src/app/autocomplete/` | Command-scoped autocomplete providers |
 | `src/app/domain/` | Workspace/session domain helpers |
 | `src/app/chat_pipeline.rs` | Chat send/stream/persist pipeline |
+| `src/app/tools/` | Tool registry, executor, safety controls |
 | `src/app/mod_tests/` | App-level unit tests formerly in `mod.rs` |
 | `src/app/tui/` | Terminal UI rendering modules |
 | `src/ollama/` | Ollama API client with streaming support |

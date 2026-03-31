@@ -1,4 +1,5 @@
 use crate::{
+    app::commands::handlers::tools::handle_tools_command,
     app::{App, ToastLevel},
     ollama,
     workspace::{manager::WorkspaceManager, WorkspaceSession},
@@ -107,6 +108,16 @@ pub(crate) async fn execute_slash_command(
         return Ok(());
     }
 
+    // Handle /tools commands
+    if prompt.trim_start().starts_with("/tools") {
+        use crate::app::commands::parser::parse_command;
+        let parsed = parse_command(prompt.trim());
+        if matches!(parsed.root(), Some("/tools")) {
+            handle_tools_command(app, &parsed);
+            return Ok(());
+        }
+    }
+
     crate::app::handle_command(app, manager, session, default_model, prompt)?;
     if let Err(err) = app.refresh_workspaces(manager) {
         app.push_system(format!("Workspace refresh failed: {err}"));
@@ -149,6 +160,11 @@ fn normalize_model_reference(raw: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::normalize_model_reference;
+    use crate::{
+        app::{commands::execute::execute_slash_command, tools::ToolPolicy, App},
+        workspace::manager::WorkspaceManager,
+    };
+    use std::time::{SystemTime, UNIX_EPOCH};
 
     #[test]
     fn normalize_model_reference_accepts_plain_model_name() {
@@ -177,5 +193,64 @@ mod tests {
     #[test]
     fn normalize_model_reference_returns_empty_for_library_url_without_model_segment() {
         assert_eq!(normalize_model_reference("https://ollama.com/library/"), "");
+    }
+
+    fn setup_manager_and_app(
+        label: &str,
+    ) -> (WorkspaceManager, crate::workspace::WorkspaceSession, App) {
+        let stamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock moved backwards")
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!(
+            "olly-tools-cmd-tests-{label}-{}-{stamp}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&root).expect("create test root");
+        let db_path = root.join("workspaces.db");
+        let manager = WorkspaceManager::open(&db_path).expect("open manager");
+        let session = manager
+            .bootstrap_default("Default Workspace", "llama3.2:latest")
+            .expect("bootstrap default workspace");
+        let mut app = App::new(
+            String::from("http://localhost:11434"),
+            String::from("llama3.2:latest"),
+        );
+        app.workspace_root_path = Some(root.to_string_lossy().to_string());
+        (manager, session, app)
+    }
+
+    #[tokio::test]
+    async fn tools_subcommand_enable_is_dispatched() {
+        let (manager, mut session, mut app) = setup_manager_and_app("tools-enable");
+
+        execute_slash_command(
+            &mut app,
+            &manager,
+            &mut session,
+            "llama3.2:latest",
+            "/tools enable",
+        )
+        .await
+        .expect("tools enable command should succeed");
+
+        assert!(app.tools_state.enabled);
+    }
+
+    #[tokio::test]
+    async fn tools_subcommand_policy_is_dispatched() {
+        let (manager, mut session, mut app) = setup_manager_and_app("tools-policy");
+
+        execute_slash_command(
+            &mut app,
+            &manager,
+            &mut session,
+            "llama3.2:latest",
+            "/tools policy confirm",
+        )
+        .await
+        .expect("tools policy command should succeed");
+
+        assert_eq!(app.tools_state.policy, ToolPolicy::Confirm);
     }
 }

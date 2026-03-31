@@ -18,6 +18,11 @@ pub(crate) fn suggestions(
         return items;
     }
 
+    // Handle /tools subcommands
+    if let Some(subcommand) = raw.strip_prefix("/tools ") {
+        return providers::tools::tools_subcommands(subcommand);
+    }
+
     if let Some(items) = providers::workspace::suggestions(raw, token, workspaces) {
         return items;
     }

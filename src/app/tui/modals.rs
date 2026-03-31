@@ -50,6 +50,41 @@ pub(super) fn render_session_delete_modal(
     render_confirm_delete_modal(frame, "session", &pending_delete.name, palette);
 }
 
+pub(super) fn render_tool_confirmation_modal(
+    frame: &mut Frame<'_>,
+    app: &App,
+    palette: super::ThemePalette,
+) {
+    let Some(pending) = &app.pending_tool_confirmation else {
+        return;
+    };
+    let area = centered_rect(70, 50, frame.area());
+    frame.render_widget(Clear, area);
+
+    let body = format!(
+        "Confirm tool execution?\n\n\
+        Tool: {}\n\
+        Step: {}/{}\n\n\
+        Arguments:\n{}\n\n\
+        Enter = execute    Esc = cancel",
+        pending.tool_name, pending.step, pending.total_steps, pending.tool_args
+    );
+
+    frame.render_widget(
+        Paragraph::new(body)
+            .style(Style::default().fg(palette.modal_fg).bg(palette.modal_bg))
+            .block(
+                Block::default()
+                    .title("Tool Confirmation")
+                    .borders(Borders::ALL)
+                    .style(Style::default().fg(palette.modal_border)),
+            )
+            .alignment(ratatui::layout::Alignment::Left)
+            .wrap(Wrap { trim: true }),
+        area,
+    );
+}
+
 pub(super) fn render_theme_picker_modal(
     frame: &mut Frame<'_>,
     app: &App,
@@ -137,7 +172,7 @@ fn help_lines() -> Vec<Line<'static>> {
         Line::from(
             "/commands, /models, /themes, /search, /export, /workspace, /session, /checkpoint",
         ),
-        Line::from("/attach, /clear-attachments, /model, /url"),
+        Line::from("/attach, /clear-attachments, /model, /url, /tools"),
     ]
 }
 
