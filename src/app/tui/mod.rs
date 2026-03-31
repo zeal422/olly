@@ -879,7 +879,9 @@ fn render_chat_panel(frame: &mut Frame<'_>, app: &App, area: Rect, palette: Them
 
     let viewport_height = split[0].height;
     let max_scroll = line_count.saturating_sub(viewport_height);
-    let scroll_y = app.chat_scroll.min(max_scroll);
+    app.update_chat_max_scroll_hint(max_scroll);
+    let from_bottom = app.chat_scroll.min(max_scroll);
+    let scroll_y = max_scroll.saturating_sub(from_bottom);
     frame.render_widget(
         Paragraph::new(text)
             .style(

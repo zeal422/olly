@@ -10,6 +10,7 @@ pub mod tools;
 pub mod tui;
 
 use std::{
+    cell::Cell,
     collections::HashSet,
     fs, io,
     path::{Path, PathBuf},
@@ -45,8 +46,6 @@ pub(crate) const COMMAND_SUGGESTIONS: &[&str] = &[
     "/url",
     "/tools",
 ];
-pub(crate) const AUTO_SCROLL_TARGET: u16 = 30_000;
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "kebab-case")]
 pub enum UiTheme {
@@ -237,6 +236,7 @@ pub struct App {
     pub show_help: bool,
     pub toast: Option<Toast>,
     pub chat_scroll: u16,
+    chat_max_scroll_hint: Cell<u16>,
     pub is_loading: bool,
     pub spinner_frame: usize,
     pub syntax_highlighting: bool,
@@ -311,7 +311,8 @@ impl App {
             focus: FocusPane::Chat,
             show_help: false,
             toast: None,
-            chat_scroll: AUTO_SCROLL_TARGET,
+            chat_scroll: 0,
+            chat_max_scroll_hint: Cell::new(0),
             is_loading: false,
             spinner_frame: 0,
             syntax_highlighting: true,
@@ -515,7 +516,7 @@ impl App {
             tool_calls_preview,
             tool_name: None,
         });
-        self.chat_scroll = AUTO_SCROLL_TARGET;
+        self.chat_scroll = 0;
     }
 
     pub(crate) fn push_user(&mut self, content: String, image_count: usize) {
@@ -536,7 +537,7 @@ impl App {
             tool_calls_preview,
             tool_name,
         });
-        self.chat_scroll = AUTO_SCROLL_TARGET;
+        self.chat_scroll = 0;
     }
 
     pub(crate) fn push_system(&mut self, content: String) {
@@ -642,14 +643,27 @@ impl App {
     }
 
     fn scroll_up(&mut self, amount: u16) {
-        self.chat_scroll = self.chat_scroll.saturating_sub(amount);
+        let max_scroll = self.chat_max_scroll_hint.get();
+        self.chat_scroll = self
+            .chat_scroll
+            .min(max_scroll)
+            .saturating_add(amount)
+            .min(max_scroll);
     }
 
     fn scroll_down(&mut self, amount: u16) {
         self.chat_scroll = self
             .chat_scroll
-            .saturating_add(amount)
-            .min(AUTO_SCROLL_TARGET);
+            .min(self.chat_max_scroll_hint.get())
+            .saturating_sub(amount);
+    }
+
+    pub(crate) fn update_chat_max_scroll_hint(&self, max_scroll: u16) {
+        self.chat_max_scroll_hint.set(max_scroll);
+    }
+
+    pub(crate) fn clamp_chat_scroll_to_hint(&mut self) {
+        self.chat_scroll = self.chat_scroll.min(self.chat_max_scroll_hint.get());
     }
 
     pub(crate) fn take_input_for_send(&mut self) -> Option<String> {

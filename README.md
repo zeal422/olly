@@ -16,6 +16,7 @@ Olly is a Rust terminal UI client for Ollama. It focuses on a fast chat loop for
 - Slash-command power features (`/search`, `/export`, `/checkpoint`, `/workspace`, `/session`, `/attach`, `/model`, `/url`, `/tools`).
 - Configurable keybindings and runtime Ollama URL.
 - Improved Windows console stability: startup sizing is normalized and resize handling avoids native scrollbar/layout glitches.
+- Mouse-wheel chat scrolling with bounded overscroll behavior and consistent speed.
 - Per-session footer telemetry including context usage (`ctx:used/max`) against model context window.
 - Footer context telemetry is restored across app restarts for the same session/model context.
 
@@ -136,6 +137,7 @@ autocomplete = "Tab"
 - `Tab`: switch focus (sidebar/chat)
 - `Arrow keys`: move input caret in chat (or move command/sidebar selection)
 - `PgUp` / `PgDn`: faster chat scroll
+- `Mouse wheel`: scroll chat history (with clamped bounds)
 - `Enter` (sidebar focused): activate selection (section headers collapse/expand)
 
 ## Slash Commands

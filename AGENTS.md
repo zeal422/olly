@@ -16,6 +16,7 @@
 - Configurable keybindings and runtime Ollama URL
 - 8 built-in UI themes with live preview
 - Hardened Windows console startup/resize behavior to reduce native scrollbar and layout artifacts
+- Mouse-wheel chat scrolling with bounded overscroll behavior and consistent speed
 - Per-session footer context telemetry (`ctx:used/max`) based on Ollama usage/model-window metadata
 - Session/model footer context telemetry restoration across app restarts via persisted UI runtime state
 
@@ -213,6 +214,7 @@ autocomplete = "Tab"
 - `Tab`: Switch focus (sidebar/chat)
 - `Up/Down`: Scroll chat or move selection
 - `PgUp/PgDn`: Fast scroll
+- `Mouse wheel`: Scroll chat history (with clamped bounds)
 
 ### Slash Commands
 - `/commands` - List available commands

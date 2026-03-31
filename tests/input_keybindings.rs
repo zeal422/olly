@@ -1,6 +1,7 @@
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseEvent, MouseEventKind};
 use olly::app::input::{
-    resolve_key_event, resolve_key_event_with_bindings, InputAction, InputBindings,
+    resolve_key_event, resolve_key_event_with_bindings, resolve_mouse_event, InputAction,
+    InputBindings,
 };
 use olly::config::KeybindingsConfig;
 
@@ -76,4 +77,30 @@ fn custom_keybindings_support_autocomplete_and_send() {
         resolve_key_event_with_bindings(tab, &bindings, "/ex"),
         InputAction::AutoCompleteCommand
     );
+}
+
+#[test]
+fn mouse_wheel_events_map_to_mouse_wheel_actions() {
+    let up = MouseEvent {
+        kind: MouseEventKind::ScrollUp,
+        column: 0,
+        row: 0,
+        modifiers: KeyModifiers::NONE,
+    };
+    let down = MouseEvent {
+        kind: MouseEventKind::ScrollDown,
+        column: 0,
+        row: 0,
+        modifiers: KeyModifiers::NONE,
+    };
+    let moved = MouseEvent {
+        kind: MouseEventKind::Moved,
+        column: 0,
+        row: 0,
+        modifiers: KeyModifiers::NONE,
+    };
+
+    assert_eq!(resolve_mouse_event(up), InputAction::MouseWheel(1));
+    assert_eq!(resolve_mouse_event(down), InputAction::MouseWheel(-1));
+    assert_eq!(resolve_mouse_event(moved), InputAction::Noop);
 }

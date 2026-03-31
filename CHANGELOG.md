@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project follows Semantic Versioning.
 
+## [0.0.12] - 2026-03-31
+
+### Added
+- Mouse-wheel chat scrolling support routed through the runtime input pipeline.
+- Faster wheel step behavior for chat scrolling to improve navigation responsiveness.
+
+### Fixed
+- Fixed chat scroll drift/overscroll behavior where repeated wheel-up at the top could accumulate hidden offset and delay visible scroll-down recovery.
+- Fixed animation coupling where high mouse-event throughput could accelerate sidebar marquee animation.
+
+### Modified
+- Chat scroll state now uses bounded from-bottom semantics with viewport-aware clamping to keep wheel navigation consistent and prevent out-of-range offsets.
+- Event-loop ticking now runs at a fixed interval to keep UI animation timing stable regardless of mouse movement frequency.
+
 ## [0.0.11] - 2026-03-30
 
 ### Added

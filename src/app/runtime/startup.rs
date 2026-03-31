@@ -2,6 +2,7 @@ use std::path::Path;
 
 use crossterm::{
     cursor::SetCursorStyle,
+    event::EnableMouseCapture,
     execute,
     terminal::{enable_raw_mode, EnterAlternateScreen},
 };
@@ -119,7 +120,7 @@ pub(crate) fn init_terminal() -> Result<super::AppTerminal, Box<dyn std::error::
     crate::app::platform::hide_console_scrollbars();
     crate::app::platform::sync_console_buffer_to_window(true);
     enable_raw_mode()?;
-    execute!(stdout, EnterAlternateScreen)?;
+    execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
     crate::app::platform::maximize_console_window();
     crate::app::platform::snap_console_window_to_cell_grid();
     crate::app::platform::hide_console_scrollbars();

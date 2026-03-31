@@ -3,7 +3,7 @@ use std::time::{Duration, Instant};
 use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
 
 use crate::{
-    app::{refresh_model_context_window, tool_calls_preview, App, ToastLevel, AUTO_SCROLL_TARGET},
+    app::{refresh_model_context_window, tool_calls_preview, App, ToastLevel},
     history,
     ollama::chat::{chat_stream_with_tools, ChatMessage, ChatToolCall, ParsedStreamChunk},
     workspace::{manager::WorkspaceManager, WorkspaceSession},
@@ -290,7 +290,7 @@ pub(crate) async fn send_prompt(
                     if let Some(value) = chunk.eval_count {
                         eval_count = Some(value);
                     }
-                    app.chat_scroll = AUTO_SCROLL_TARGET;
+                    app.chat_scroll = 0;
                     let _ = terminal.draw(|f| crate::app::tui::draw(f, app));
                 },
             )
@@ -313,7 +313,7 @@ pub(crate) async fn send_prompt(
                     if let Some(value) = chunk.eval_count {
                         eval_count = Some(value);
                     }
-                    app.chat_scroll = AUTO_SCROLL_TARGET;
+                    app.chat_scroll = 0;
                     let _ = terminal.draw(|f| crate::app::tui::draw(f, app));
                 },
             )
@@ -352,7 +352,7 @@ pub(crate) async fn send_prompt(
                     if let Some(value) = chunk.eval_count {
                         eval_count = Some(value);
                     }
-                    app.chat_scroll = AUTO_SCROLL_TARGET;
+                    app.chat_scroll = 0;
                     let _ = terminal.draw(|f| crate::app::tui::draw(f, app));
                 },
             )

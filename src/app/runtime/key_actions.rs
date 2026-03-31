@@ -15,6 +15,8 @@ enum ScrollRoute {
     ChatScroll,
 }
 
+const MOUSE_WHEEL_SCROLL_STEP: u16 = 3;
+
 fn resolve_scroll_route(app: &App, amount: u16) -> ScrollRoute {
     if app.is_command_suggestion_mode() {
         ScrollRoute::CommandSuggestions
@@ -24,6 +26,23 @@ fn resolve_scroll_route(app: &App, amount: u16) -> ScrollRoute {
         ScrollRoute::InputCaret
     } else {
         ScrollRoute::ChatScroll
+    }
+}
+
+fn apply_mouse_wheel_scroll(app: &mut App, amount: i16) {
+    app.clamp_chat_scroll_to_hint();
+    if amount > 0 {
+        app.scroll_up(
+            amount
+                .unsigned_abs()
+                .saturating_mul(MOUSE_WHEEL_SCROLL_STEP),
+        );
+    } else if amount < 0 {
+        app.scroll_down(
+            amount
+                .unsigned_abs()
+                .saturating_mul(MOUSE_WHEEL_SCROLL_STEP),
+        );
     }
 }
 
@@ -54,6 +73,7 @@ pub(crate) async fn handle_action(
                 app.autocomplete_command();
             }
         }
+        crate::app::input::InputAction::MouseWheel(amount) => apply_mouse_wheel_scroll(app, amount),
         crate::app::input::InputAction::ScrollUp(amount) => {
             match resolve_scroll_route(app, amount) {
                 ScrollRoute::CommandSuggestions => app.autocomplete_command_prev(),
@@ -168,7 +188,7 @@ pub(crate) async fn handle_action(
 
 #[cfg(test)]
 mod tests {
-    use super::{resolve_scroll_route, ScrollRoute};
+    use super::{apply_mouse_wheel_scroll, resolve_scroll_route, ScrollRoute};
     use crate::app::{App, FocusPane};
 
     #[test]
@@ -220,5 +240,34 @@ mod tests {
         app.set_input_text(String::from("line one"));
 
         assert_eq!(resolve_scroll_route(&app, 8), ScrollRoute::ChatScroll);
+    }
+
+    #[test]
+    fn mouse_wheel_scrolls_chat_even_when_sidebar_focused() {
+        let mut app = App::new(
+            String::from("http://localhost:11434"),
+            String::from("llama3.2:latest"),
+        );
+        app.focus = FocusPane::Workspaces;
+        app.update_chat_max_scroll_hint(500);
+        app.chat_scroll = 100;
+
+        apply_mouse_wheel_scroll(&mut app, 1);
+
+        assert_eq!(app.chat_scroll, 103);
+    }
+
+    #[test]
+    fn mouse_wheel_down_clamps_to_auto_scroll_target() {
+        let mut app = App::new(
+            String::from("http://localhost:11434"),
+            String::from("llama3.2:latest"),
+        );
+        app.update_chat_max_scroll_hint(500);
+        app.chat_scroll = 0;
+
+        apply_mouse_wheel_scroll(&mut app, -1);
+
+        assert_eq!(app.chat_scroll, 0);
     }
 }

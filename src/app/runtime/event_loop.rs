@@ -1,4 +1,5 @@
 use std::path::Path;
+use std::time::{Duration, Instant};
 
 use crossterm::event::{self, Event};
 
@@ -19,15 +20,12 @@ pub(crate) async fn run(
     ui_state_path: &Path,
     last_saved_ui_state: &mut UiRuntimeState,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    const TICK_RATE: Duration = Duration::from_millis(80);
+    let mut last_tick = Instant::now();
+
     while !app.should_quit() {
-        app.tick();
-        let current_ui_state = app.snapshot_ui_state();
-        if current_ui_state != *last_saved_ui_state {
-            let _ = save_ui_state_to_path(ui_state_path, &current_ui_state);
-            *last_saved_ui_state = current_ui_state;
-        }
-        terminal.draw(|f| crate::app::tui::draw(f, app))?;
-        if event::poll(std::time::Duration::from_millis(50))? {
+        let timeout = TICK_RATE.saturating_sub(last_tick.elapsed());
+        if event::poll(timeout)? {
             match event::read()? {
                 Event::Resize(_, _) => {
                     terminal.autoresize()?;
@@ -62,9 +60,46 @@ pub(crate) async fn run(
                     )
                     .await?;
                 }
+                Event::Mouse(mouse) => {
+                    let action = crate::app::input::resolve_mouse_event(mouse);
+                    if action != crate::app::input::InputAction::Noop {
+                        if super::overlays::handle_overlay_action(
+                            app,
+                            action.clone(),
+                            manager,
+                            session,
+                            default_model,
+                        )? {
+                            continue;
+                        }
+
+                        super::key_actions::handle_action(
+                            app,
+                            action,
+                            manager,
+                            session,
+                            default_model,
+                            client,
+                            terminal,
+                        )
+                        .await?;
+                    }
+                }
                 _ => {}
             }
         }
+
+        if last_tick.elapsed() >= TICK_RATE {
+            app.tick();
+            last_tick = Instant::now();
+        }
+
+        let current_ui_state = app.snapshot_ui_state();
+        if current_ui_state != *last_saved_ui_state {
+            let _ = save_ui_state_to_path(ui_state_path, &current_ui_state);
+            *last_saved_ui_state = current_ui_state;
+        }
+        terminal.draw(|f| crate::app::tui::draw(f, app))?;
     }
 
     Ok(())
