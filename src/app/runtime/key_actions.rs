@@ -270,4 +270,189 @@ mod tests {
 
         assert_eq!(app.chat_scroll, 0);
     }
+
+    #[test]
+    fn scroll_up_from_zero_increases() {
+        let mut app = App::new(
+            String::from("http://localhost:11434"),
+            String::from("llama3.2:latest"),
+        );
+        app.update_chat_max_scroll_hint(500);
+        app.chat_scroll = 0;
+
+        app.scroll_up(30);
+
+        assert_eq!(app.chat_scroll, 30);
+    }
+
+    #[test]
+    fn scroll_up_increases_correctly() {
+        let mut app = App::new(
+            String::from("http://localhost:11434"),
+            String::from("llama3.2:latest"),
+        );
+        app.update_chat_max_scroll_hint(500);
+        app.chat_scroll = 100;
+
+        app.scroll_up(30);
+
+        assert_eq!(app.chat_scroll, 130);
+    }
+
+    #[test]
+    fn scroll_up_caps_at_max_scroll() {
+        let mut app = App::new(
+            String::from("http://localhost:11434"),
+            String::from("llama3.2:latest"),
+        );
+        app.update_chat_max_scroll_hint(500);
+        app.chat_scroll = 490;
+
+        app.scroll_up(50);
+
+        assert_eq!(app.chat_scroll, 500);
+    }
+
+    #[test]
+    fn scroll_down_from_max_decreases() {
+        let mut app = App::new(
+            String::from("http://localhost:11434"),
+            String::from("llama3.2:latest"),
+        );
+        app.update_chat_max_scroll_hint(500);
+        app.chat_scroll = 500;
+
+        app.scroll_down(30);
+
+        assert_eq!(app.chat_scroll, 470);
+    }
+
+    #[test]
+    fn scroll_down_decreases_correctly() {
+        let mut app = App::new(
+            String::from("http://localhost:11434"),
+            String::from("llama3.2:latest"),
+        );
+        app.update_chat_max_scroll_hint(500);
+        app.chat_scroll = 100;
+
+        app.scroll_down(30);
+
+        assert_eq!(app.chat_scroll, 70);
+    }
+
+    #[test]
+    fn scroll_down_caps_at_zero() {
+        let mut app = App::new(
+            String::from("http://localhost:11434"),
+            String::from("llama3.2:latest"),
+        );
+        app.update_chat_max_scroll_hint(500);
+        app.chat_scroll = 10;
+
+        app.scroll_down(50);
+
+        assert_eq!(app.chat_scroll, 0);
+    }
+
+    #[test]
+    fn clamp_chat_scroll_to_hint_reduces_when_above_max() {
+        let mut app = App::new(
+            String::from("http://localhost:11434"),
+            String::from("llama3.2:latest"),
+        );
+        app.update_chat_max_scroll_hint(500);
+        app.chat_scroll = 600;
+
+        app.clamp_chat_scroll_to_hint();
+
+        assert_eq!(app.chat_scroll, 500);
+    }
+
+    #[test]
+    fn clamp_chat_scroll_to_hint_keeps_valid_value() {
+        let mut app = App::new(
+            String::from("http://localhost:11434"),
+            String::from("llama3.2:latest"),
+        );
+        app.update_chat_max_scroll_hint(500);
+        app.chat_scroll = 100;
+
+        app.clamp_chat_scroll_to_hint();
+
+        assert_eq!(app.chat_scroll, 100);
+    }
+
+    #[test]
+    fn apply_mouse_wheel_scroll_scrolls_chat() {
+        let mut app = App::new(
+            String::from("http://localhost:11434"),
+            String::from("llama3.2:latest"),
+        );
+        app.update_chat_max_scroll_hint(500);
+        app.chat_scroll = 100;
+
+        apply_mouse_wheel_scroll(&mut app, 1);
+
+        assert_eq!(app.chat_scroll, 103);
+    }
+
+    #[test]
+    fn apply_mouse_wheel_scroll_down_caps_at_zero() {
+        let mut app = App::new(
+            String::from("http://localhost:11434"),
+            String::from("llama3.2:latest"),
+        );
+        app.update_chat_max_scroll_hint(500);
+        app.chat_scroll = 0;
+
+        apply_mouse_wheel_scroll(&mut app, -1);
+
+        assert_eq!(app.chat_scroll, 0);
+    }
+
+    #[test]
+    fn mouse_wheel_scroll_step_applies_multiplier() {
+        let mut app = App::new(
+            String::from("http://localhost:11434"),
+            String::from("llama3.2:latest"),
+        );
+        app.update_chat_max_scroll_hint(500);
+        app.chat_scroll = 0;
+
+        apply_mouse_wheel_scroll(&mut app, 2);
+
+        assert_eq!(app.chat_scroll, 6);
+    }
+
+    #[test]
+    fn rapid_mouse_wheel_events_accumulate() {
+        let mut app = App::new(
+            String::from("http://localhost:11434"),
+            String::from("llama3.2:latest"),
+        );
+        app.update_chat_max_scroll_hint(500);
+        app.chat_scroll = 0;
+
+        apply_mouse_wheel_scroll(&mut app, 1);
+        apply_mouse_wheel_scroll(&mut app, 1);
+        apply_mouse_wheel_scroll(&mut app, 1);
+
+        assert_eq!(app.chat_scroll, 9);
+    }
+
+    #[test]
+    fn mouse_wheel_scrolls_chat_in_command_suggestion_mode() {
+        let mut app = App::new(
+            String::from("http://localhost:11434"),
+            String::from("llama3.2:latest"),
+        );
+        app.update_chat_max_scroll_hint(500);
+        app.chat_scroll = 100;
+        app.set_input_text(String::from("/workspace "));
+
+        apply_mouse_wheel_scroll(&mut app, 1);
+
+        assert_eq!(app.chat_scroll, 103);
+    }
 }

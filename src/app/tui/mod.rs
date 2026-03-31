@@ -26,6 +26,11 @@ mod sidebar;
 
 const SPINNER_FRAMES: &[&str] = &["|", "/", "-", "\\"];
 
+fn calculate_scroll_position(chat_scroll: u16, max_scroll: u16) -> u16 {
+    let from_bottom = chat_scroll.min(max_scroll);
+    max_scroll.saturating_sub(from_bottom)
+}
+
 struct SyntaxEngine {
     syntaxes: SyntaxSet,
     theme: Theme,
@@ -880,8 +885,7 @@ fn render_chat_panel(frame: &mut Frame<'_>, app: &App, area: Rect, palette: Them
     let viewport_height = split[0].height;
     let max_scroll = line_count.saturating_sub(viewport_height);
     app.update_chat_max_scroll_hint(max_scroll);
-    let from_bottom = app.chat_scroll.min(max_scroll);
-    let scroll_y = max_scroll.saturating_sub(from_bottom);
+    let scroll_y = calculate_scroll_position(app.chat_scroll, max_scroll);
     frame.render_widget(
         Paragraph::new(text)
             .style(
@@ -1638,9 +1642,9 @@ fn sidebar_action_hint(app: &App) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        estimate_input_visual_lines, input_cursor_screen_position, input_cursor_visual_position,
-        input_panel_height, scroll_window, sidebar_action_hint, sidebar_line_with_marquee,
-        truncate_end, truncate_middle,
+        calculate_scroll_position, estimate_input_visual_lines, input_cursor_screen_position,
+        input_cursor_visual_position, input_panel_height, scroll_window, sidebar_action_hint,
+        sidebar_line_with_marquee, truncate_end, truncate_middle,
     };
     use crate::app::{App, ModelBucket, SessionEntry, SidebarItem, WorkspaceEntry};
     use ratatui::layout::Rect;
@@ -1797,5 +1801,35 @@ mod tests {
         let visible =
             input_cursor_screen_position(input, cursor, area, inner_width, inner_height, 1);
         assert!(visible.is_some());
+    }
+
+    #[test]
+    fn calculate_scroll_position_at_bottom_returns_max() {
+        assert_eq!(calculate_scroll_position(0, 500), 500);
+    }
+
+    #[test]
+    fn calculate_scroll_position_at_top_returns_zero() {
+        assert_eq!(calculate_scroll_position(500, 500), 0);
+    }
+
+    #[test]
+    fn calculate_scroll_position_in_middle_returns_correct() {
+        assert_eq!(calculate_scroll_position(250, 500), 250);
+    }
+
+    #[test]
+    fn calculate_scroll_position_zero_max_returns_zero() {
+        assert_eq!(calculate_scroll_position(0, 0), 0);
+    }
+
+    #[test]
+    fn calculate_scroll_position_stale_scroll_caps_at_zero() {
+        assert_eq!(calculate_scroll_position(600, 500), 0);
+    }
+
+    #[test]
+    fn calculate_scroll_position_chat_scroll_caps_at_max() {
+        assert_eq!(calculate_scroll_position(400, 300), 0);
     }
 }

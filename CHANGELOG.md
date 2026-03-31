@@ -9,6 +9,7 @@ The format is based on Keep a Changelog, and this project follows Semantic Versi
 ### Added
 - Mouse-wheel chat scrolling support routed through the runtime input pipeline.
 - Faster wheel step behavior for chat scrolling to improve navigation responsiveness.
+- Comprehensive test coverage for scroll semantics, mouse-wheel routing, and TUI scroll calculation (27 new tests).
 
 ### Fixed
 - Fixed chat scroll drift/overscroll behavior where repeated wheel-up at the top could accumulate hidden offset and delay visible scroll-down recovery.

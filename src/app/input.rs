@@ -201,3 +201,42 @@ pub fn resolve_mouse_event(event: MouseEvent) -> InputAction {
         _ => InputAction::Noop,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crossterm::event::{KeyModifiers, MouseEvent, MouseEventKind};
+
+    #[test]
+    fn resolve_mouse_event_scroll_up_returns_positive() {
+        let event = MouseEvent {
+            kind: MouseEventKind::ScrollUp,
+            column: 0,
+            row: 0,
+            modifiers: KeyModifiers::NONE,
+        };
+        assert_eq!(resolve_mouse_event(event), InputAction::MouseWheel(1));
+    }
+
+    #[test]
+    fn resolve_mouse_event_scroll_down_returns_negative() {
+        let event = MouseEvent {
+            kind: MouseEventKind::ScrollDown,
+            column: 0,
+            row: 0,
+            modifiers: KeyModifiers::NONE,
+        };
+        assert_eq!(resolve_mouse_event(event), InputAction::MouseWheel(-1));
+    }
+
+    #[test]
+    fn resolve_mouse_event_moved_ignored() {
+        let event = MouseEvent {
+            kind: MouseEventKind::Moved,
+            column: 0,
+            row: 0,
+            modifiers: KeyModifiers::NONE,
+        };
+        assert_eq!(resolve_mouse_event(event), InputAction::Noop);
+    }
+}
