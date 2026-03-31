@@ -1,6 +1,6 @@
 [package]
 name = "olly"
-version = "0.0.11"
+version = "0.0.12"
 edition = "2021"
 description = "WhatsApp-like terminal client for Ollama with workspaces and persistent chat."
 readme = "README.md"

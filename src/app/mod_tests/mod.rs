@@ -1,6 +1,10 @@
 mod autocomplete;
 mod helpers;
+mod input_editor;
+mod model_switching;
+mod pending;
 mod regressions;
 mod scroll;
+mod toast;
 mod ui_runtime_state;
 mod workspace_session;
