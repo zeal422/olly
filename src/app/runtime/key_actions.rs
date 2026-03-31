@@ -6,6 +6,7 @@ use crate::{
     },
     workspace::{manager::WorkspaceManager, WorkspaceSession},
 };
+use copypasta::{ClipboardContext, ClipboardProvider};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ScrollRoute {
@@ -120,6 +121,29 @@ pub(crate) async fn handle_action(
                 || (app.focus == FocusPane::Workspaces && app.is_slash_command_input())
             {
                 app.backspace_input_char();
+            }
+        }
+        crate::app::input::InputAction::Paste => {
+            if app.focus == FocusPane::Chat
+                || (app.focus == FocusPane::Workspaces && app.is_slash_command_input())
+            {
+                match ClipboardContext::new() {
+                    Ok(mut ctx) => {
+                        match ctx.get_contents() {
+                            Ok(content) => {
+                                if !content.is_empty() {
+                                    app.insert_input_string(content);
+                                }
+                            }
+                            Err(_) => {
+                                // Silently fail clipboard access - no toast needed
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        // Silently fail clipboard creation - no toast needed
+                    }
+                }
             }
         }
         crate::app::input::InputAction::NewLine => {

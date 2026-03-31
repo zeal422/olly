@@ -2,6 +2,7 @@ mod autocomplete;
 mod helpers;
 mod input_editor;
 mod model_switching;
+mod paste;
 mod pending;
 mod regressions;
 mod scroll;

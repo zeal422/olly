@@ -1,4 +1,6 @@
-use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseEvent, MouseEventKind};
+use crossterm::event::{
+    KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
+};
 
 use crate::config::KeybindingsConfig;
 
@@ -17,6 +19,7 @@ pub enum InputAction {
     SwitchFocus,
     AutoCompleteCommand,
     MouseWheel(i16),
+    Paste,
     Quit,
     Noop,
 }
@@ -196,6 +199,7 @@ pub fn resolve_key_event_with_bindings(
 
 pub fn resolve_mouse_event(event: MouseEvent) -> InputAction {
     match event.kind {
+        MouseEventKind::Down(MouseButton::Right) => InputAction::Paste,
         MouseEventKind::ScrollUp => InputAction::MouseWheel(1),
         MouseEventKind::ScrollDown => InputAction::MouseWheel(-1),
         _ => InputAction::Noop,

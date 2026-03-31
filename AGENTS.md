@@ -17,6 +17,7 @@
 - 8 built-in UI themes with live preview
 - Hardened Windows console startup/resize behavior to reduce native scrollbar and layout artifacts
 - Mouse-wheel chat scrolling with bounded overscroll behavior and consistent speed
+- **Right-click paste support** with cross-platform clipboard integration and focus-aware behavior
 - Per-session footer context telemetry (`ctx:used/max`) based on Ollama usage/model-window metadata
 - Session/model footer context telemetry restoration across app restarts via persisted UI runtime state
 
@@ -54,6 +55,7 @@ src/
 - **CLI Parsing**: `clap` with derive macros
 - **Serialization**: `serde` + `serde_json`
 - **Syntax Highlighting**: `syntect` for markdown code blocks
+- **Clipboard Integration**: `copypasta` for cross-platform clipboard support
 - **Error Handling**: `thiserror` for custom error types
 
 ## Building and Running
@@ -215,6 +217,7 @@ autocomplete = "Tab"
 - `Up/Down`: Scroll chat or move selection
 - `PgUp/PgDn`: Fast scroll
 - `Mouse wheel`: Scroll chat history (with clamped bounds)
+- `Right-click`: Paste clipboard content (chat input and slash commands only)
 
 ### Slash Commands
 - `/commands` - List available commands

@@ -790,6 +790,15 @@ impl App {
         self.reset_command_selection();
     }
 
+    pub(crate) fn insert_input_string(&mut self, text: String) {
+        self.clamp_input_cursor();
+        let insert_at = Self::byte_index_for_char(&self.input, self.input_cursor_char_index);
+        self.input.insert_str(insert_at, &text);
+        self.input_cursor_char_index += text.chars().count();
+        self.input_cursor_preferred_column = None;
+        self.reset_command_selection();
+    }
+
     pub(crate) fn backspace_input_char(&mut self) {
         self.clamp_input_cursor();
         if self.input_cursor_char_index == 0 {

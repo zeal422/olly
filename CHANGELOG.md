@@ -11,6 +11,11 @@ The format is based on Keep a Changelog, and this project follows Semantic Versi
 - Faster wheel step behavior for chat scrolling to improve navigation responsiveness.
 - Comprehensive test coverage for scroll semantics, mouse-wheel routing, and TUI scroll calculation (27 new tests).
 - High-risk test coverage: toasts, input editor, pending expiration, model switching (18 new tests).
+- **Right-click paste support** for chat input and slash commands:
+  - Cross-platform clipboard integration using copypasta library (Windows, macOS, Linux)
+  - Focus-aware paste: works in chat input and slash command mode, ignored elsewhere
+  - Silent error handling for clipboard access failures
+  - Comprehensive test coverage for mouse event resolution and string insertion (11 new tests)
 
 ### Fixed
 - Fixed chat scroll drift/overscroll behavior where repeated wheel-up at the top could accumulate hidden offset and delay visible scroll-down recovery.

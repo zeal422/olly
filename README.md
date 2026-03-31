@@ -138,6 +138,7 @@ autocomplete = "Tab"
 - `Arrow keys`: move input caret in chat (or move command/sidebar selection)
 - `PgUp` / `PgDn`: faster chat scroll
 - `Mouse wheel`: scroll chat history (with clamped bounds)
+- `Right-click`: paste clipboard content (chat input and slash commands only)
 - `Enter` (sidebar focused): activate selection (section headers collapse/expand)
 
 ## Slash Commands
