@@ -269,11 +269,45 @@ autocomplete = "Tab"
 | `docs/` | Documentation including release policy |
 | `installer/` | Windows installer configuration |
 | `.git-cliff.toml` | Changelog generation config |
-## Important Notes
+## Agent Discipline & Git Safety
 
-- **License**: Proprietary software owned by VectorMedia
-- **Ownership**: All contributions licensed to VectorMedia
-- **Security**: Report security issues privately to maintainers
-- **Release Process**: Requires all quality gates to pass (fmt, clippy, tests)
-- **Cross-platform**: Supports Linux (x86_64, aarch64), macOS (Intel, Apple Silicon), Windows (x86_64)
+### CRITICAL RULES (Non-Negotiable)
+
+1. **NEVER run destructive Git commands on uncommitted work without explicit user confirmation**
+   - `git reset --hard`, `git clean -fd`, `git checkout <file>` (without `--`), `git restore <file>` - all require user confirmation
+   - Always show: `git status` first and state what will be lost
+   - Ask: "This will discard X uncommitted changes. Proceed? [Yes/No]"
+
+2. **When frustrated or stuck, STOP and ask for guidance**
+   - If you're making repeated errors, corrupted files, or feel panicked: **pause immediately**
+   - Tell the user: "I'm having difficulty with X. Should I try a different approach or let you take over?"
+   - Never act impulsively when emotional - take a breath, reassess
+
+3. **Always verify current state before making changes**
+   - Read the file(s) you're about to modify and confirm you understand the current structure
+   - Check `git status` to see what's already changed
+   - If unsure what a change will affect, ask the user
+
+4. **Make small, reversible changes with explicit saves**
+   - Use `git add` + `git commit` frequently to checkpoint progress
+   - Prefer `edit` tool with precise oldString/newString matches over bulk replacements
+   - When experimenting, create a new branch first: `git checkout -b temp-experiment`
+
+5. **If you destroy work, immediately acknowledge and offer recovery options**
+   - Tell the user exactly what happened
+   - Check reflog: `git reflog` (may recover if file was staged)
+   - Offer to rebuild from scratch if needed
+   - Do NOT hide or minimize the mistake
+
+### Mental Discipline Checklist
+
+Before performing any operation that could lose data:
+- [ ] Have I read the file(s) recently to understand their current state?
+- [ ] Does `git status` show any uncommitted changes that could be lost?
+- [ ] Is there a way to achieve the goal without destructive operations?
+- [ ] Would creating a commit or stash first be safer?
+- [ ] Am I acting out of frustration or is this a clear, reasoned step?
+- [ ] Have I communicated the plan to the user and received confirmation?
+
+**Remember: It's better to ask for permission than to apologize for irreversible damage.**
 
