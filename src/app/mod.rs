@@ -713,6 +713,7 @@ impl App {
         self.chat_selection_anchor = None;
         self.chat_selection_current = None;
         self.is_selecting = false;
+        self.auto_scroll_direction = None;
     }
 
     pub(crate) fn update_chat_area_metadata(
