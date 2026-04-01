@@ -8,6 +8,7 @@ use crate::{
 };
 use copypasta::{ClipboardContext, ClipboardProvider};
 use crossterm::event::MouseEvent;
+use ratatui::layout::Alignment;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ScrollRoute {
@@ -32,7 +33,6 @@ fn mouse_to_chat_visual_position(app: &App, mouse: MouseEvent) -> Option<(usize,
     }
 
     let relative_row = row.saturating_sub(area.y) as usize;
-    let col_index = col.saturating_sub(area.x) as usize;
 
     if app.chat_visual_lines.is_empty() {
         return None;
@@ -48,6 +48,25 @@ fn mouse_to_chat_visual_position(app: &App, mouse: MouseEvent) -> Option<(usize,
     let visual_line = top_offset
         .saturating_add(relative_row)
         .min(app.chat_visual_lines.len() - 1);
+
+    let col_usize = col as usize;
+    let (line_text, alignment_opt) = &app.chat_visual_lines[visual_line];
+    let line_width = line_text.chars().count();
+    let area_width = area.width as usize;
+    let start_x = match alignment_opt.unwrap_or(Alignment::Left) {
+        Alignment::Left => area.x as usize,
+        Alignment::Right => area.x as usize + area_width.saturating_sub(line_width),
+        Alignment::Center => area.x as usize + area_width.saturating_sub(line_width) / 2,
+    };
+    let end_x = start_x + line_width;
+
+    // Reject clicks outside the rendered text span (horizontal margins)
+    if col_usize < start_x || col_usize >= end_x {
+        return None;
+    }
+
+    let col_index = col_usize - start_x;
+
     Some((visual_line, col_index))
 }
 
@@ -316,7 +335,7 @@ fn handle_end_selection(app: &mut App) {
 }
 
 fn extract_selection_text(
-    visual_lines: &[String],
+    visual_lines: &[(String, Option<Alignment>)],
     anchor: (usize, usize),
     current: (usize, usize),
 ) -> String {
@@ -330,12 +349,12 @@ fn extract_selection_text(
 
     let mut lines: Vec<String> = Vec::new();
 
-    for (i, line) in visual_lines.iter().enumerate() {
+    for (i, (text, _alignment)) in visual_lines.iter().enumerate() {
         if i < start_line || i > end_line {
             continue;
         }
 
-        let line_chars: Vec<char> = line.chars().collect();
+        let line_chars: Vec<char> = text.chars().collect();
         let line_len = line_chars.len();
 
         // Determine the selection range on this line (exclusive end)
@@ -363,7 +382,7 @@ fn extract_selection_text(
                 // empty segment on boundary line
                 lines.push(String::new());
             } else {
-                lines.push(line.clone());
+                lines.push(text.clone());
             }
             continue;
         }
@@ -382,6 +401,7 @@ mod tests {
         resolve_scroll_route, ScrollRoute,
     };
     use crate::app::{App, FocusPane};
+    use ratatui::layout::Alignment;
 
     #[test]
     fn scroll_route_prioritizes_command_suggestions_over_sidebar_focus() {
@@ -655,6 +675,8 @@ mod tests {
             String::from("llama3.2:latest"),
         );
         app.chat_area = Some(ratatui::layout::Rect::new(0, 0, 80, 20));
+        // Provide dummy visual lines with alignment
+        app.chat_visual_lines = vec![(String::new(), Some(Alignment::Left)); 20];
         let mouse = crossterm::event::MouseEvent {
             kind: crossterm::event::MouseEventKind::Moved,
             column: 100,
@@ -672,7 +694,9 @@ mod tests {
             String::from("llama3.2:latest"),
         );
         // total visual lines = 20, viewport height = 15 => max_scroll = 5
-        app.chat_visual_lines = vec![String::new(); 20];
+        // Use non-empty lines to test hit detection
+        let line_text = "Hello world".to_string();
+        app.chat_visual_lines = vec![(line_text.clone(), Some(Alignment::Left)); 20];
         // Set scroll to 2 (offset from bottom)
         app.chat_scroll = 2;
         // Compute top_offset = max_scroll - chat_scroll = 5 - 2 = 3
@@ -680,20 +704,53 @@ mod tests {
         app.chat_area = Some(Rect::new(5, 2, 70, 15));
         let mouse = crossterm::event::MouseEvent {
             kind: crossterm::event::MouseEventKind::Moved,
-            column: 10,
+            column: 10, // area.x=5, text starts at 5, so this hits char index 5 (the space before 'w')
             row: 5,
             modifiers: crossterm::event::KeyModifiers::NONE,
         };
         let result = mouse_to_chat_visual_position(&app, mouse);
         // relative_row = row - area.y = 5 - 2 = 3
         // visual_line = top_offset + relative_row = 3 + 3 = 6
-        // col = column - area.x = 10 - 5 = 5
+        // start_x = area.x = 5; line width = 11; valid range [5, 16)
+        // column 10 is within range, so col_index = 10 - 5 = 5
         assert_eq!(result, Some((6, 5)));
     }
 
     #[test]
+    fn mouse_to_chat_visual_position_rejects_margin_click_left_of_text() {
+        use ratatui::layout::Rect;
+        let mut app = App::new(
+            String::from("http://localhost:11434"),
+            String::from("llama3.2:latest"),
+        );
+        // Line with text "Hello" (5 chars)
+        let line_text = "Hello".to_string();
+        app.chat_visual_lines = vec![(line_text.clone(), Some(Alignment::Left)); 1];
+        app.chat_scroll = 0;
+        // area.x=10, line starts at 10, valid range [10, 15)
+        app.chat_area = Some(Rect::new(10, 0, 80, 10));
+        // Click left of text at column 5 (before start_x=10)
+        let mouse_left = crossterm::event::MouseEvent {
+            kind: crossterm::event::MouseEventKind::Moved,
+            column: 5,
+            row: 0,
+            modifiers: crossterm::event::KeyModifiers::NONE,
+        };
+        assert_eq!(mouse_to_chat_visual_position(&app, mouse_left), None);
+
+        // Click right of text at column 20 (after end=15)
+        let mouse_right = crossterm::event::MouseEvent {
+            kind: crossterm::event::MouseEventKind::Moved,
+            column: 20,
+            row: 0,
+            modifiers: crossterm::event::KeyModifiers::NONE,
+        };
+        assert_eq!(mouse_to_chat_visual_position(&app, mouse_right), None);
+    }
+
+    #[test]
     fn extract_selection_text_single_line() {
-        let lines = vec![String::from("Hello world")];
+        let lines = vec![(String::from("Hello world"), Some(Alignment::Left))];
         let anchor = (0, 6);
         let current = (0, 10); // selects "world" (characters from 6 to 10 inclusive)
         let text = extract_selection_text(&lines, anchor, current);
@@ -703,9 +760,9 @@ mod tests {
     #[test]
     fn extract_selection_text_multi_line() {
         let lines = vec![
-            String::from("First line"),
-            String::from("Second line"),
-            String::from("Third line"),
+            (String::from("First line"), Some(Alignment::Left)),
+            (String::from("Second line"), Some(Alignment::Left)),
+            (String::from("Third line"), Some(Alignment::Left)),
         ];
         // Select from after the space (position 6) in first line => "line"
         // Full second line => "Second line"

@@ -15,6 +15,15 @@ The format is based on Keep a Changelog, and this project follows Semantic Versi
   - Supports wrapped lines, multi-line selection, and preserves text styles during highlighting
   - 9 new unit tests covering reflow, selection mapping, and copy extraction
 
+### Fixed
+- Fixed selection only responding to drag events, not plain mouse movement (prevents spurious selection updates)
+- Fixed clipboard error handling to show error toast on failure instead of always showing success
+- Fixed coordinate mapping to use correct offset-from-bottom scroll semantics
+- Fixed alignment-aware column calculation to handle right/center-aligned messages
+- Fixed underflow in horizontal offset computation for aligned lines with `saturating_sub`
+- Fixed margin click detection to reject clicks outside rendered text span for aligned lines
+- Fixed stale chat metadata persistence when showing welcome/no-session screens
+
 ## [0.0.12] - 2026-03-31
 
 ### Added

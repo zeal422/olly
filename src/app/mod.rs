@@ -18,6 +18,7 @@ use std::{
 };
 
 use chrono::Local;
+use ratatui::layout::Alignment;
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -241,7 +242,7 @@ pub struct App {
     pub chat_selection_current: Option<(usize, usize)>,
     pub is_selecting: bool,
     pub chat_area: Option<ratatui::layout::Rect>,
-    pub chat_visual_lines: Vec<String>,
+    pub chat_visual_lines: Vec<(String, Option<Alignment>)>,
     pub is_loading: bool,
     pub spinner_frame: usize,
     pub syntax_highlighting: bool,
@@ -690,7 +691,7 @@ impl App {
     pub(crate) fn update_chat_area_metadata(
         &mut self,
         area: ratatui::layout::Rect,
-        visual_lines: Vec<String>,
+        visual_lines: Vec<(String, Option<Alignment>)>,
         max_scroll: u16,
     ) {
         self.chat_area = Some(area);

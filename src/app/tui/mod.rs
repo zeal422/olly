@@ -1189,6 +1189,12 @@ fn render_chat_panel(frame: &mut Frame<'_>, app: &mut App, area: Rect, palette: 
                 .wrap(Wrap { trim: true }),
             welcome_area,
         );
+        // Clear stale chat metadata when not in chat view
+        app.chat_area = None;
+        app.chat_visual_lines.clear();
+        app.clear_chat_selection();
+        app.chat_scroll = 0;
+        app.chat_max_scroll_hint.set(0);
         return;
     }
 
@@ -1209,6 +1215,12 @@ fn render_chat_panel(frame: &mut Frame<'_>, app: &mut App, area: Rect, palette: 
                 .wrap(Wrap { trim: true }),
             inner,
         );
+        // Clear stale chat metadata when not in chat view
+        app.chat_area = None;
+        app.chat_visual_lines.clear();
+        app.clear_chat_selection();
+        app.chat_scroll = 0;
+        app.chat_max_scroll_hint.set(0);
         return;
     }
 
@@ -1221,9 +1233,9 @@ fn render_chat_panel(frame: &mut Frame<'_>, app: &mut App, area: Rect, palette: 
     let chat_width = split[0].width as usize;
     let logical_lines = build_chat_logical_lines(app, palette);
     let visual_lines = manual_reflow(&logical_lines, chat_width);
-    let plain_lines: Vec<String> = visual_lines
+    let plain_lines: Vec<(String, Option<Alignment>)> = visual_lines
         .iter()
-        .map(|line| line_to_string(line))
+        .map(|line| (line_to_string(line), line.alignment))
         .collect();
     let max_scroll = visual_lines.len().saturating_sub(viewport_height as usize) as u16;
     app.update_chat_area_metadata(split[0], plain_lines, max_scroll);
