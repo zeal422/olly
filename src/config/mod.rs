@@ -52,6 +52,7 @@ pub struct KeybindingsConfig {
     pub dismiss: String,
     pub switch_focus: String,
     pub autocomplete: String,
+    pub copy: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -112,6 +113,7 @@ impl Default for KeybindingsConfig {
             dismiss: String::from("Esc"),
             switch_focus: String::from("Tab"),
             autocomplete: String::from("Tab"),
+            copy: String::from("Ctrl+C"),
         }
     }
 }

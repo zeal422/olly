@@ -31,6 +31,7 @@ pub(crate) async fn run(
                     terminal.autoresize()?;
                     terminal.clear()?;
                     crate::app::platform::hide_console_scrollbars();
+                    app.clear_chat_selection();
                 }
                 Event::Key(key) => {
                     let action = crate::app::input::resolve_key_event_with_bindings(
@@ -52,6 +53,7 @@ pub(crate) async fn run(
                     super::key_actions::handle_action(
                         app,
                         action,
+                        None,
                         manager,
                         session,
                         default_model,
@@ -76,6 +78,7 @@ pub(crate) async fn run(
                         super::key_actions::handle_action(
                             app,
                             action,
+                            Some(mouse),
                             manager,
                             session,
                             default_model,

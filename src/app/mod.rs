@@ -237,6 +237,11 @@ pub struct App {
     pub toast: Option<Toast>,
     pub chat_scroll: u16,
     chat_max_scroll_hint: Cell<u16>,
+    pub chat_selection_anchor: Option<(usize, usize)>,
+    pub chat_selection_current: Option<(usize, usize)>,
+    pub is_selecting: bool,
+    pub chat_area: Option<ratatui::layout::Rect>,
+    pub chat_visual_lines: Vec<String>,
     pub is_loading: bool,
     pub spinner_frame: usize,
     pub syntax_highlighting: bool,
@@ -313,6 +318,11 @@ impl App {
             toast: None,
             chat_scroll: 0,
             chat_max_scroll_hint: Cell::new(0),
+            chat_selection_anchor: None,
+            chat_selection_current: None,
+            is_selecting: false,
+            chat_area: None,
+            chat_visual_lines: Vec::new(),
             is_loading: false,
             spinner_frame: 0,
             syntax_highlighting: true,
@@ -508,6 +518,7 @@ impl App {
         image_count: usize,
         tool_calls_preview: Option<String>,
     ) {
+        self.clear_chat_selection();
         self.messages.push(Message {
             role: role.into(),
             content: content.into(),
@@ -528,6 +539,7 @@ impl App {
     }
 
     pub(crate) fn push_tool(&mut self, content: String, tool_name: Option<String>) {
+        self.clear_chat_selection();
         let tool_calls_preview = tool_name.as_ref().map(|name| format!("Tool: {}", name));
         self.messages.push(Message {
             role: "Tool".to_string(),
@@ -581,6 +593,7 @@ impl App {
     }
 
     pub(crate) fn switch_focus(&mut self) {
+        self.clear_chat_selection();
         self.focus = match self.focus {
             FocusPane::Workspaces => FocusPane::Chat,
             FocusPane::Chat => FocusPane::Workspaces,
@@ -643,6 +656,7 @@ impl App {
     }
 
     fn scroll_up(&mut self, amount: u16) {
+        self.clear_chat_selection();
         let max_scroll = self.chat_max_scroll_hint.get();
         self.chat_scroll = self
             .chat_scroll
@@ -652,6 +666,7 @@ impl App {
     }
 
     fn scroll_down(&mut self, amount: u16) {
+        self.clear_chat_selection();
         self.chat_scroll = self
             .chat_scroll
             .min(self.chat_max_scroll_hint.get())
@@ -664,6 +679,23 @@ impl App {
 
     pub(crate) fn clamp_chat_scroll_to_hint(&mut self) {
         self.chat_scroll = self.chat_scroll.min(self.chat_max_scroll_hint.get());
+    }
+
+    pub(crate) fn clear_chat_selection(&mut self) {
+        self.chat_selection_anchor = None;
+        self.chat_selection_current = None;
+        self.is_selecting = false;
+    }
+
+    pub(crate) fn update_chat_area_metadata(
+        &mut self,
+        area: ratatui::layout::Rect,
+        visual_lines: Vec<String>,
+        max_scroll: u16,
+    ) {
+        self.chat_area = Some(area);
+        self.chat_visual_lines = visual_lines;
+        self.update_chat_max_scroll_hint(max_scroll);
     }
 
     pub(crate) fn take_input_for_send(&mut self) -> Option<String> {
@@ -782,6 +814,7 @@ impl App {
     }
 
     pub(crate) fn insert_input_char(&mut self, ch: char) {
+        self.clear_chat_selection();
         self.clamp_input_cursor();
         let insert_at = Self::byte_index_for_char(&self.input, self.input_cursor_char_index);
         self.input.insert(insert_at, ch);
@@ -791,6 +824,7 @@ impl App {
     }
 
     pub(crate) fn insert_input_string(&mut self, text: String) {
+        self.clear_chat_selection();
         self.clamp_input_cursor();
         let insert_at = Self::byte_index_for_char(&self.input, self.input_cursor_char_index);
         self.input.insert_str(insert_at, &text);
@@ -800,6 +834,7 @@ impl App {
     }
 
     pub(crate) fn backspace_input_char(&mut self) {
+        self.clear_chat_selection();
         self.clamp_input_cursor();
         if self.input_cursor_char_index == 0 {
             return;
@@ -1136,6 +1171,7 @@ impl App {
         session: &mut crate::workspace::WorkspaceSession,
         default_model: &str,
     ) -> Result<(), Box<dyn std::error::Error>> {
+        self.clear_chat_selection();
         match self.sidebar_item() {
             Some(SidebarItem::SectionHeader(SidebarSection::Models)) => {
                 self.models_collapsed = !self.models_collapsed;

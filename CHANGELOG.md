@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project follows Semantic Versioning.
 
+## [0.0.13] - 2026-04-01
+
+### Added
+- **Mouse drag text selection and Ctrl+C copy** for chat messages:
+  - Left-click and drag to select text in chat history with visual highlighting
+  - Ctrl+C copies selected text to clipboard (clears selection after copy)
+  - Selection is cleared on scroll, new messages, focus changes, and resize
+  - Manual text reflow pipeline ensures selection boundaries align with rendered text exactly
+  - Supports wrapped lines, multi-line selection, and preserves text styles during highlighting
+  - 9 new unit tests covering reflow, selection mapping, and copy extraction
+
 ## [0.0.12] - 2026-03-31
 
 ### Added

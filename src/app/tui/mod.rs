@@ -487,7 +487,7 @@ fn autocomplete_background(theme: UiTheme) -> Color {
     }
 }
 
-pub fn draw(frame: &mut Frame<'_>, app: &App) {
+pub fn draw(frame: &mut Frame<'_>, app: &mut App) {
     if frame.area().width < 2 || frame.area().height < 2 {
         return;
     }
@@ -763,7 +763,344 @@ fn render_models_panel(frame: &mut Frame<'_>, app: &App, area: Rect, palette: Th
     );
 }
 
-fn render_chat_panel(frame: &mut Frame<'_>, app: &App, area: Rect, palette: ThemePalette) {
+fn build_chat_logical_lines(app: &App, palette: ThemePalette) -> Vec<Line<'static>> {
+    let mut lines: Vec<Line<'static>> = Vec::new();
+
+    for message in &app.messages {
+        let (avatar, align, base_style, header_style) = match message.role.as_str() {
+            "You" => (
+                "YOU",
+                Alignment::Right,
+                Style::default().fg(palette.you_fg).bg(palette.you_bg),
+                Style::default()
+                    .fg(palette.you_header)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            "Assistant" => (
+                "AI",
+                Alignment::Left,
+                Style::default()
+                    .fg(palette.assistant_fg)
+                    .bg(palette.assistant_bg),
+                Style::default()
+                    .fg(palette.assistant_header)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            "Tool" => (
+                "TOOL",
+                Alignment::Left,
+                Style::default().fg(palette.tool_fg).bg(palette.tool_bg),
+                Style::default()
+                    .fg(palette.tool_header)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            _ => (
+                "SYS",
+                Alignment::Center,
+                Style::default().fg(palette.system_fg).bg(palette.system_bg),
+                Style::default()
+                    .fg(palette.system_header)
+                    .add_modifier(Modifier::ITALIC),
+            ),
+        };
+
+        lines.push(
+            Line::from(vec![Span::styled(
+                match &message.tool_calls_preview {
+                    Some(preview) => format!("{avatar} {} | {preview}", message.timestamp),
+                    None => format!("{avatar} {}", message.timestamp),
+                },
+                header_style,
+            )])
+            .alignment(align),
+        );
+
+        if message.image_count > 0 {
+            lines.push(
+                Line::from(vec![Span::styled(
+                    format!(" [attached images: {}] ", message.image_count),
+                    base_style
+                        .fg(palette.image_badge_fg)
+                        .bg(palette.image_badge_bg)
+                        .add_modifier(Modifier::BOLD),
+                )])
+                .alignment(align),
+            );
+        }
+
+        let message_lines = markdown::markdown_lines(
+            &message.content,
+            base_style,
+            app.syntax_highlighting,
+            palette,
+        );
+        for spans in message_lines {
+            lines.push(Line::from(spans).alignment(align));
+        }
+        lines.push(Line::default());
+    }
+
+    lines
+}
+
+fn line_width(line: &Line<'_>) -> usize {
+    line.spans
+        .iter()
+        .map(|span| span.content.chars().count())
+        .sum()
+}
+
+fn line_to_string(line: &Line<'_>) -> String {
+    line.spans
+        .iter()
+        .map(|span| span.content.as_ref())
+        .collect()
+}
+
+fn manual_reflow<'a>(logical_lines: &[Line<'a>], width: usize) -> Vec<Line<'a>> {
+    if width == 0 {
+        return logical_lines.to_vec();
+    }
+
+    let mut result = Vec::new();
+
+    for line in logical_lines {
+        let lw = line_width(line);
+        if lw <= width || line.spans.is_empty() {
+            result.push(line.clone());
+            continue;
+        }
+
+        let alignment = line.alignment;
+
+        let mut remaining: Vec<Span<'a>> = line.spans.clone();
+        while !remaining.is_empty() {
+            let mut current_line_spans: Vec<Span<'a>> = Vec::new();
+            let mut current_width = 0;
+            let mut next_remaining: Vec<Span<'a>> = Vec::new();
+            let mut broke_mid_span = false;
+
+            for span in &remaining {
+                let span_chars: Vec<char> = span.content.chars().collect();
+                let span_len = span_chars.len();
+
+                if current_width + span_len <= width {
+                    current_line_spans.push(span.clone());
+                    current_width += span_len;
+                } else {
+                    let space_left = width - current_width;
+                    if space_left > 0 && current_line_spans.is_empty() {
+                        let split_text: String = span_chars[..space_left].iter().collect();
+                        let remainder_text: String = span_chars[space_left..].iter().collect();
+                        current_line_spans.push(Span {
+                            content: std::borrow::Cow::Owned(split_text),
+                            style: span.style,
+                        });
+                        if !remainder_text.is_empty() {
+                            next_remaining.push(Span {
+                                content: std::borrow::Cow::Owned(remainder_text),
+                                style: span.style,
+                            });
+                        }
+                    } else if !current_line_spans.is_empty() {
+                        next_remaining.push(span.clone());
+                    } else {
+                        let split_text: String = span_chars[..width].iter().collect();
+                        let remainder_text: String = span_chars[width..].iter().collect();
+                        current_line_spans.push(Span {
+                            content: std::borrow::Cow::Owned(split_text),
+                            style: span.style,
+                        });
+                        if !remainder_text.is_empty() {
+                            next_remaining.push(Span {
+                                content: std::borrow::Cow::Owned(remainder_text),
+                                style: span.style,
+                            });
+                        }
+                    }
+                    broke_mid_span = true;
+                    break;
+                }
+            }
+
+            if !broke_mid_span && current_line_spans.is_empty() && !remaining.is_empty() {
+                let span = &remaining[0];
+                let span_chars: Vec<char> = span.content.chars().collect();
+                let split_text: String = span_chars[..width.min(span_chars.len())].iter().collect();
+                let remainder_text: String =
+                    span_chars[width.min(span_chars.len())..].iter().collect();
+                current_line_spans.push(Span {
+                    content: std::borrow::Cow::Owned(split_text),
+                    style: span.style,
+                });
+                if !remainder_text.is_empty() {
+                    next_remaining.push(Span {
+                        content: std::borrow::Cow::Owned(remainder_text),
+                        style: span.style,
+                    });
+                }
+            }
+
+            result.push(Line {
+                spans: current_line_spans,
+                alignment,
+                style: Style::default(),
+            });
+            remaining = next_remaining;
+        }
+    }
+
+    result
+}
+
+fn apply_selection_to_text(
+    visual_lines: &[Line<'_>],
+    anchor: (usize, usize),
+    current: (usize, usize),
+) -> Vec<Line<'static>> {
+    let (mut start_line, mut start_col) = anchor;
+    let (mut end_line, mut end_col) = current;
+
+    if start_line > end_line || (start_line == end_line && start_col > end_col) {
+        std::mem::swap(&mut start_line, &mut end_line);
+        std::mem::swap(&mut start_col, &mut end_col);
+    }
+
+    let selection_style = Style::default().add_modifier(Modifier::REVERSED);
+    let mut result = Vec::new();
+
+    for (i, line) in visual_lines.iter().enumerate() {
+        if i < start_line || i > end_line {
+            result.push(Line {
+                spans: line
+                    .spans
+                    .iter()
+                    .map(|s| Span {
+                        content: std::borrow::Cow::Owned(s.content.to_string()),
+                        style: s.style,
+                    })
+                    .collect(),
+                alignment: line.alignment,
+                style: Style::default(),
+            });
+            continue;
+        }
+
+        let line_len = line_width(line);
+        let sel_start = start_col.min(line_len);
+        let sel_end_excl = if i == end_line {
+            end_col.saturating_add(1).min(line_len)
+        } else {
+            line_len
+        };
+
+        if i == start_line && i == end_line {
+            let new_spans = split_line_at_selection(line, sel_start, sel_end_excl, selection_style);
+            result.push(Line {
+                spans: new_spans,
+                alignment: line.alignment,
+                style: Style::default(),
+            });
+        } else if i == start_line {
+            let new_spans = split_line_at_selection(line, sel_start, line_len, selection_style);
+            result.push(Line {
+                spans: new_spans,
+                alignment: line.alignment,
+                style: Style::default(),
+            });
+        } else if i == end_line {
+            let new_spans = split_line_at_selection(line, 0, sel_end_excl, selection_style);
+            result.push(Line {
+                spans: new_spans,
+                alignment: line.alignment,
+                style: Style::default(),
+            });
+        } else {
+            let new_spans: Vec<Span<'static>> = line
+                .spans
+                .iter()
+                .map(|s| Span {
+                    content: std::borrow::Cow::Owned(s.content.to_string()),
+                    style: s.style.patch(selection_style),
+                })
+                .collect();
+            result.push(Line {
+                spans: new_spans,
+                alignment: line.alignment,
+                style: Style::default(),
+            });
+        }
+    }
+
+    result
+}
+
+fn split_line_at_selection(
+    line: &Line<'_>,
+    sel_start: usize,
+    sel_end: usize,
+    selection_style: Style,
+) -> Vec<Span<'static>> {
+    if sel_start >= sel_end {
+        return line
+            .spans
+            .iter()
+            .map(|s| Span {
+                content: std::borrow::Cow::Owned(s.content.to_string()),
+                style: s.style,
+            })
+            .collect();
+    }
+
+    let mut result = Vec::new();
+    let mut char_offset = 0;
+
+    for span in &line.spans {
+        let span_text: String = span.content.to_string();
+        let span_len = span_text.chars().count();
+        let span_start = char_offset;
+        let span_end = char_offset + span_len;
+
+        if span_end <= sel_start || span_start >= sel_end {
+            result.push(Span {
+                content: std::borrow::Cow::Owned(span_text),
+                style: span.style,
+            });
+        } else {
+            let chars: Vec<char> = span_text.chars().collect();
+            let overlap_start = sel_start.saturating_sub(span_start);
+            let overlap_end = sel_end.min(span_end) - span_start;
+
+            if overlap_start > 0 {
+                let before: String = chars[..overlap_start].iter().collect();
+                result.push(Span {
+                    content: std::borrow::Cow::Owned(before),
+                    style: span.style,
+                });
+            }
+
+            let selected: String = chars[overlap_start..overlap_end].iter().collect();
+            result.push(Span {
+                content: std::borrow::Cow::Owned(selected),
+                style: span.style.patch(selection_style),
+            });
+
+            if overlap_end < span_len {
+                let after: String = chars[overlap_end..].iter().collect();
+                result.push(Span {
+                    content: std::borrow::Cow::Owned(after),
+                    style: span.style,
+                });
+            }
+        }
+
+        char_offset += span_len;
+    }
+
+    result
+}
+
+fn render_chat_panel(frame: &mut Frame<'_>, app: &mut App, area: Rect, palette: ThemePalette) {
     if area.width < 2 || area.height < 2 {
         return;
     }
@@ -777,8 +1114,6 @@ fn render_chat_panel(frame: &mut Frame<'_>, app: &App, area: Rect, palette: Them
             .fg(palette.border_inactive)
             .bg(chat_background(app.theme))
     };
-    let text = render_chat_text(app, palette);
-    let line_count = text.lines.len() as u16;
     let block = Block::default()
         .title("Chat")
         .borders(Borders::ALL)
@@ -883,18 +1218,34 @@ fn render_chat_panel(frame: &mut Frame<'_>, app: &App, area: Rect, palette: Them
         .split(inner);
 
     let viewport_height = split[0].height;
-    let max_scroll = line_count.saturating_sub(viewport_height);
-    app.update_chat_max_scroll_hint(max_scroll);
+    let chat_width = split[0].width as usize;
+    let logical_lines = build_chat_logical_lines(app, palette);
+    let visual_lines = manual_reflow(&logical_lines, chat_width);
+    let plain_lines: Vec<String> = visual_lines
+        .iter()
+        .map(|line| line_to_string(line))
+        .collect();
+    let max_scroll = visual_lines.len().saturating_sub(viewport_height as usize) as u16;
+    app.update_chat_area_metadata(split[0], plain_lines, max_scroll);
+
     let scroll_y = calculate_scroll_position(app.chat_scroll, max_scroll);
+
+    let display_lines = if let (Some(anchor), Some(current)) =
+        (app.chat_selection_anchor, app.chat_selection_current)
+    {
+        apply_selection_to_text(&visual_lines, anchor, current)
+    } else {
+        visual_lines
+    };
+
     frame.render_widget(
-        Paragraph::new(text)
+        Paragraph::new(Text::from(display_lines))
             .style(
                 Style::default()
                     .fg(palette.chat_text)
                     .bg(chat_background(app.theme)),
             )
-            .scroll((scroll_y, 0))
-            .wrap(Wrap { trim: false }),
+            .scroll((scroll_y, 0)),
         split[0],
     );
 
@@ -1164,86 +1515,6 @@ fn render_autocomplete_popup(
             ),
         popup_area,
     );
-}
-
-fn render_chat_text(app: &App, palette: ThemePalette) -> Text<'static> {
-    let mut lines: Vec<Line<'static>> = Vec::new();
-
-    for message in &app.messages {
-        let (avatar, align, base_style, header_style) = match message.role.as_str() {
-            "You" => (
-                "YOU",
-                Alignment::Right,
-                Style::default().fg(palette.you_fg).bg(palette.you_bg),
-                Style::default()
-                    .fg(palette.you_header)
-                    .add_modifier(Modifier::BOLD),
-            ),
-            "Assistant" => (
-                "AI",
-                Alignment::Left,
-                Style::default()
-                    .fg(palette.assistant_fg)
-                    .bg(palette.assistant_bg),
-                Style::default()
-                    .fg(palette.assistant_header)
-                    .add_modifier(Modifier::BOLD),
-            ),
-            "Tool" => (
-                "TOOL",
-                Alignment::Left,
-                Style::default().fg(palette.tool_fg).bg(palette.tool_bg),
-                Style::default()
-                    .fg(palette.tool_header)
-                    .add_modifier(Modifier::BOLD),
-            ),
-            _ => (
-                "SYS",
-                Alignment::Center,
-                Style::default().fg(palette.system_fg).bg(palette.system_bg),
-                Style::default()
-                    .fg(palette.system_header)
-                    .add_modifier(Modifier::ITALIC),
-            ),
-        };
-
-        lines.push(
-            Line::from(vec![Span::styled(
-                match &message.tool_calls_preview {
-                    Some(preview) => format!("{avatar} {} | {preview}", message.timestamp),
-                    None => format!("{avatar} {}", message.timestamp),
-                },
-                header_style,
-            )])
-            .alignment(align),
-        );
-
-        if message.image_count > 0 {
-            lines.push(
-                Line::from(vec![Span::styled(
-                    format!(" [attached images: {}] ", message.image_count),
-                    base_style
-                        .fg(palette.image_badge_fg)
-                        .bg(palette.image_badge_bg)
-                        .add_modifier(Modifier::BOLD),
-                )])
-                .alignment(align),
-            );
-        }
-
-        let message_lines = markdown::markdown_lines(
-            &message.content,
-            base_style,
-            app.syntax_highlighting,
-            palette,
-        );
-        for spans in message_lines {
-            lines.push(Line::from(spans).alignment(align));
-        }
-        lines.push(Line::default());
-    }
-
-    Text::from(lines)
 }
 
 fn markdown_lines(
@@ -1642,12 +1913,14 @@ fn sidebar_action_hint(app: &App) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        calculate_scroll_position, estimate_input_visual_lines, input_cursor_screen_position,
-        input_cursor_visual_position, input_panel_height, scroll_window, sidebar_action_hint,
-        sidebar_line_with_marquee, truncate_end, truncate_middle,
+        apply_selection_to_text, calculate_scroll_position, estimate_input_visual_lines,
+        input_cursor_screen_position, input_cursor_visual_position, input_panel_height,
+        manual_reflow, scroll_window, sidebar_action_hint, sidebar_line_with_marquee, truncate_end,
+        truncate_middle, Style,
     };
     use crate::app::{App, ModelBucket, SessionEntry, SidebarItem, WorkspaceEntry};
     use ratatui::layout::Rect;
+    use ratatui::style::Modifier;
 
     fn app_for_sidebar_tests() -> App {
         let mut app = App::new(
@@ -1831,5 +2104,79 @@ mod tests {
     #[test]
     fn calculate_scroll_position_chat_scroll_caps_at_max() {
         assert_eq!(calculate_scroll_position(400, 300), 0);
+    }
+
+    #[test]
+    fn manual_reflow_short_line_unchanged() {
+        let line = ratatui::text::Line::from(vec![ratatui::text::Span::raw("Hi")]);
+        let result = manual_reflow(&[line], 80);
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].spans[0].content, "Hi");
+    }
+
+    #[test]
+    fn manual_reflow_breaks_long_word() {
+        let line =
+            ratatui::text::Line::from(vec![ratatui::text::Span::raw("abcdefghijklmnopqrstuvwxyz")]);
+        let result = manual_reflow(&[line], 10);
+        assert!(result.len() > 1);
+        for line in &result {
+            let width = line
+                .spans
+                .iter()
+                .map(|s| s.content.chars().count())
+                .sum::<usize>();
+            assert!(width <= 10);
+        }
+    }
+
+    #[test]
+    fn manual_reflow_wraps_long_line_at_spaces() {
+        let line = ratatui::text::Line::from(vec![
+            ratatui::text::Span::raw("Hello "),
+            ratatui::text::Span::raw("world"),
+            ratatui::text::Span::raw(" this"),
+            ratatui::text::Span::raw(" is"),
+            ratatui::text::Span::raw(" a"),
+            ratatui::text::Span::raw(" test"),
+        ]);
+        let result = manual_reflow(&[line], 10);
+        // The total width should be <= 10 per line
+        for line in &result {
+            let width = line
+                .spans
+                .iter()
+                .map(|s| s.content.chars().count())
+                .sum::<usize>();
+            assert!(width <= 10);
+        }
+    }
+
+    #[test]
+    fn apply_selection_to_text_highlights_single_line() {
+        use ratatui::style::Modifier;
+        let line = ratatui::text::Line::from(vec![ratatui::text::Span::raw("Hello world")]);
+        let visual_lines = vec![line];
+        let anchor = (0, 6);
+        let current = (0, 10);
+        let result = apply_selection_to_text(&visual_lines, anchor, current);
+        // The selected part "wor" should have reversed style
+        // Check that the line contains spans with reversed style
+        let reversed_style = Style::default().add_modifier(Modifier::REVERSED);
+        let has_reversed = result[0].spans.iter().any(|s| s.style == reversed_style);
+        assert!(has_reversed);
+    }
+
+    #[test]
+    fn apply_selection_to_text_whole_line() {
+        let line = ratatui::text::Line::from(vec![ratatui::text::Span::raw("Hello")]);
+        let visual_lines = vec![line];
+        let anchor = (0, 0);
+        let current = (0, 4);
+        let result = apply_selection_to_text(&visual_lines, anchor, current);
+        // Entire line should be reversed
+        let reversed_style = Style::default().add_modifier(Modifier::REVERSED);
+        let all_reversed = result[0].spans.iter().all(|s| s.style == reversed_style);
+        assert!(all_reversed);
     }
 }

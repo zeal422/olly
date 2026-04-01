@@ -16,7 +16,7 @@ fn resolve_mouse_event_right_click_returns_paste() {
 }
 
 #[test]
-fn resolve_mouse_event_left_click_ignored() {
+fn resolve_mouse_event_left_click_starts_selection() {
     let event = MouseEvent {
         kind: MouseEventKind::Down(MouseButton::Left),
         column: 10,
@@ -25,7 +25,7 @@ fn resolve_mouse_event_left_click_ignored() {
     };
     assert_eq!(
         crate::app::input::resolve_mouse_event(event),
-        crate::app::input::InputAction::Noop
+        crate::app::input::InputAction::StartSelection
     );
 }
 

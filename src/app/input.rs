@@ -20,6 +20,10 @@ pub enum InputAction {
     AutoCompleteCommand,
     MouseWheel(i16),
     Paste,
+    Copy,
+    StartSelection,
+    UpdateSelection,
+    EndSelection,
     Quit,
     Noop,
 }
@@ -39,6 +43,7 @@ pub struct InputBindings {
     pub dismiss: InputBinding,
     pub switch_focus: InputBinding,
     pub autocomplete: InputBinding,
+    pub copy: InputBinding,
 }
 
 impl Default for InputBinding {
@@ -113,6 +118,7 @@ impl Default for InputBindings {
             dismiss: InputBinding::from_string("Esc").unwrap_or_default(),
             switch_focus: InputBinding::from_string("Tab").unwrap_or_default(),
             autocomplete: InputBinding::from_string("Tab").unwrap_or_default(),
+            copy: InputBinding::from_string("Ctrl+C").unwrap_or_default(),
         }
     }
 }
@@ -142,6 +148,7 @@ impl InputBindings {
                 .unwrap_or(defaults.switch_focus),
             autocomplete: InputBinding::from_string(&config.autocomplete)
                 .unwrap_or(defaults.autocomplete),
+            copy: InputBinding::from_string(&config.copy).unwrap_or(defaults.copy),
         }
     }
 }
@@ -183,6 +190,9 @@ pub fn resolve_key_event_with_bindings(
     if bindings.switch_focus.matches(&event) {
         return InputAction::SwitchFocus;
     }
+    if bindings.copy.matches(&event) {
+        return InputAction::Copy;
+    }
 
     match event.code {
         KeyCode::Up => InputAction::ScrollUp(1),
@@ -200,6 +210,9 @@ pub fn resolve_key_event_with_bindings(
 pub fn resolve_mouse_event(event: MouseEvent) -> InputAction {
     match event.kind {
         MouseEventKind::Down(MouseButton::Right) => InputAction::Paste,
+        MouseEventKind::Down(MouseButton::Left) => InputAction::StartSelection,
+        MouseEventKind::Up(MouseButton::Left) => InputAction::EndSelection,
+        MouseEventKind::Drag(MouseButton::Left) => InputAction::UpdateSelection,
         MouseEventKind::ScrollUp => InputAction::MouseWheel(1),
         MouseEventKind::ScrollDown => InputAction::MouseWheel(-1),
         _ => InputAction::Noop,
@@ -234,13 +247,46 @@ mod tests {
     }
 
     #[test]
-    fn resolve_mouse_event_moved_ignored() {
+    fn resolve_mouse_event_left_down_starts_selection() {
         let event = MouseEvent {
-            kind: MouseEventKind::Moved,
+            kind: MouseEventKind::Down(MouseButton::Left),
             column: 0,
             row: 0,
             modifiers: KeyModifiers::NONE,
         };
-        assert_eq!(resolve_mouse_event(event), InputAction::Noop);
+        assert_eq!(resolve_mouse_event(event), InputAction::StartSelection);
+    }
+
+    #[test]
+    fn resolve_mouse_event_left_up_ends_selection() {
+        let event = MouseEvent {
+            kind: MouseEventKind::Up(MouseButton::Left),
+            column: 0,
+            row: 0,
+            modifiers: KeyModifiers::NONE,
+        };
+        assert_eq!(resolve_mouse_event(event), InputAction::EndSelection);
+    }
+
+    #[test]
+    fn resolve_mouse_event_drag_updates_selection() {
+        let event = MouseEvent {
+            kind: MouseEventKind::Drag(MouseButton::Left),
+            column: 0,
+            row: 0,
+            modifiers: KeyModifiers::NONE,
+        };
+        assert_eq!(resolve_mouse_event(event), InputAction::UpdateSelection);
+    }
+
+    #[test]
+    fn resolve_mouse_event_right_click_paste() {
+        let event = MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Right),
+            column: 0,
+            row: 0,
+            modifiers: KeyModifiers::NONE,
+        };
+        assert_eq!(resolve_mouse_event(event), InputAction::Paste);
     }
 }

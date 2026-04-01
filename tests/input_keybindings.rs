@@ -1,4 +1,4 @@
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseEvent, MouseEventKind};
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 use olly::app::input::{
     resolve_key_event, resolve_key_event_with_bindings, resolve_mouse_event, InputAction,
     InputBindings,
@@ -93,14 +93,28 @@ fn mouse_wheel_events_map_to_mouse_wheel_actions() {
         row: 0,
         modifiers: KeyModifiers::NONE,
     };
+    assert_eq!(resolve_mouse_event(up), InputAction::MouseWheel(1));
+    assert_eq!(resolve_mouse_event(down), InputAction::MouseWheel(-1));
+}
+
+#[test]
+fn mouse_drag_updates_selection() {
+    let drag = MouseEvent {
+        kind: MouseEventKind::Drag(MouseButton::Left),
+        column: 0,
+        row: 0,
+        modifiers: KeyModifiers::NONE,
+    };
+    assert_eq!(resolve_mouse_event(drag), InputAction::UpdateSelection);
+}
+
+#[test]
+fn mouse_move_without_drag_returns_noop() {
     let moved = MouseEvent {
         kind: MouseEventKind::Moved,
         column: 0,
         row: 0,
         modifiers: KeyModifiers::NONE,
     };
-
-    assert_eq!(resolve_mouse_event(up), InputAction::MouseWheel(1));
-    assert_eq!(resolve_mouse_event(down), InputAction::MouseWheel(-1));
     assert_eq!(resolve_mouse_event(moved), InputAction::Noop);
 }

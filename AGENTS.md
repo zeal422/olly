@@ -18,6 +18,7 @@
 - Hardened Windows console startup/resize behavior to reduce native scrollbar and layout artifacts
 - Mouse-wheel chat scrolling with bounded overscroll behavior and consistent speed
 - **Right-click paste support** with cross-platform clipboard integration and focus-aware behavior
+- **Mouse drag text selection and Ctrl+C copy** for chat messages with visual highlighting and proper reflow alignment
 - Per-session footer context telemetry (`ctx:used/max`) based on Ollama usage/model-window metadata
 - Session/model footer context telemetry restoration across app restarts via persisted UI runtime state
 
@@ -218,6 +219,7 @@ autocomplete = "Tab"
 - `PgUp/PgDn`: Fast scroll
 - `Mouse wheel`: Scroll chat history (with clamped bounds)
 - `Right-click`: Paste clipboard content (chat input and slash commands only)
+- `Ctrl+C`: Copy selected text from chat (when text is selected via mouse drag)
 
 ### Slash Commands
 - `/commands` - List available commands
