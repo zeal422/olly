@@ -243,6 +243,8 @@ pub struct App {
     pub is_selecting: bool,
     pub chat_area: Option<ratatui::layout::Rect>,
     pub chat_visual_lines: Vec<(String, Option<Alignment>)>,
+    pub auto_scroll_direction: Option<i16>,
+    pub auto_scroll_speed: u16,
     pub is_loading: bool,
     pub spinner_frame: usize,
     pub syntax_highlighting: bool,
@@ -324,6 +326,8 @@ impl App {
             is_selecting: false,
             chat_area: None,
             chat_visual_lines: Vec::new(),
+            auto_scroll_direction: None,
+            auto_scroll_speed: 3,
             is_loading: false,
             spinner_frame: 0,
             syntax_highlighting: true,
@@ -484,6 +488,15 @@ impl App {
         if let Some(pending_tool) = &self.pending_tool_confirmation {
             if Instant::now() > pending_tool.expires_at {
                 self.pending_tool_confirmation = None;
+            }
+        }
+
+        // Apply auto-scroll if active during selection drag
+        if let Some(direction) = self.auto_scroll_direction {
+            if direction < 0 {
+                self.scroll_up_preserve_selection(self.auto_scroll_speed);
+            } else {
+                self.scroll_down_preserve_selection(self.auto_scroll_speed);
             }
         }
     }
@@ -657,7 +670,6 @@ impl App {
     }
 
     fn scroll_up(&mut self, amount: u16) {
-        self.clear_chat_selection();
         let max_scroll = self.chat_max_scroll_hint.get();
         self.chat_scroll = self
             .chat_scroll
@@ -667,7 +679,22 @@ impl App {
     }
 
     fn scroll_down(&mut self, amount: u16) {
-        self.clear_chat_selection();
+        self.chat_scroll = self
+            .chat_scroll
+            .min(self.chat_max_scroll_hint.get())
+            .saturating_sub(amount);
+    }
+
+    fn scroll_up_preserve_selection(&mut self, amount: u16) {
+        let max_scroll = self.chat_max_scroll_hint.get();
+        self.chat_scroll = self
+            .chat_scroll
+            .min(max_scroll)
+            .saturating_add(amount)
+            .min(max_scroll);
+    }
+
+    fn scroll_down_preserve_selection(&mut self, amount: u16) {
         self.chat_scroll = self
             .chat_scroll
             .min(self.chat_max_scroll_hint.get())

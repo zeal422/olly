@@ -23,6 +23,7 @@ pub enum InputAction {
     Copy,
     StartSelection,
     UpdateSelection,
+    ExtendSelection,
     EndSelection,
     Quit,
     Noop,
@@ -210,7 +211,13 @@ pub fn resolve_key_event_with_bindings(
 pub fn resolve_mouse_event(event: MouseEvent) -> InputAction {
     match event.kind {
         MouseEventKind::Down(MouseButton::Right) => InputAction::Paste,
-        MouseEventKind::Down(MouseButton::Left) => InputAction::StartSelection,
+        MouseEventKind::Down(MouseButton::Left) => {
+            if event.modifiers.contains(KeyModifiers::SHIFT) {
+                InputAction::ExtendSelection
+            } else {
+                InputAction::StartSelection
+            }
+        }
         MouseEventKind::Up(MouseButton::Left) => InputAction::EndSelection,
         MouseEventKind::Drag(MouseButton::Left) => InputAction::UpdateSelection,
         MouseEventKind::ScrollUp => InputAction::MouseWheel(1),
@@ -288,5 +295,27 @@ mod tests {
             modifiers: KeyModifiers::NONE,
         };
         assert_eq!(resolve_mouse_event(event), InputAction::Paste);
+    }
+
+    #[test]
+    fn resolve_mouse_event_shift_click_extends_selection() {
+        let event = MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            column: 10,
+            row: 5,
+            modifiers: KeyModifiers::SHIFT,
+        };
+        assert_eq!(resolve_mouse_event(event), InputAction::ExtendSelection);
+    }
+
+    #[test]
+    fn resolve_mouse_event_left_click_without_shift_starts_selection() {
+        let event = MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            column: 10,
+            row: 5,
+            modifiers: KeyModifiers::NONE,
+        };
+        assert_eq!(resolve_mouse_event(event), InputAction::StartSelection);
     }
 }

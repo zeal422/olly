@@ -276,6 +276,11 @@ pub(crate) async fn handle_action(
         crate::app::input::InputAction::EndSelection => {
             handle_end_selection(app);
         }
+        crate::app::input::InputAction::ExtendSelection => {
+            if let Some(mouse) = mouse_event {
+                handle_extend_selection(app, mouse);
+            }
+        }
     }
 
     Ok(())
@@ -327,11 +332,43 @@ fn handle_update_selection(app: &mut App, mouse: MouseEvent) {
         if let Some(pos) = mouse_to_chat_visual_position(app, mouse) {
             app.chat_selection_current = Some(pos);
         }
+
+        // Check if mouse is near chat area edges for auto-scroll
+        if let Some(area) = app.chat_area {
+            let mouse_row = mouse.row;
+            let chat_top = area.y;
+            let chat_bottom = area.y + area.height - 1;
+
+            // Edge threshold: 3 rows from top/bottom
+            const EDGE_THRESHOLD: u16 = 3;
+
+            if mouse_row <= chat_top + EDGE_THRESHOLD && mouse_row > chat_top {
+                // Near top edge - scroll up
+                app.auto_scroll_direction = Some(-1);
+            } else if mouse_row >= chat_bottom - EDGE_THRESHOLD && mouse_row < chat_bottom {
+                // Near bottom edge - scroll down
+                app.auto_scroll_direction = Some(1);
+            } else {
+                // Outside edge zone - stop auto-scroll
+                app.auto_scroll_direction = None;
+            }
+        }
     }
 }
 
 fn handle_end_selection(app: &mut App) {
     app.is_selecting = false;
+    app.auto_scroll_direction = None;
+}
+
+fn handle_extend_selection(app: &mut App, mouse: MouseEvent) {
+    if app.chat_selection_anchor.is_some() {
+        if let Some(pos) = mouse_to_chat_visual_position(app, mouse) {
+            app.chat_selection_current = Some(pos);
+        }
+    } else {
+        handle_start_selection(app, mouse);
+    }
 }
 
 fn extract_selection_text(

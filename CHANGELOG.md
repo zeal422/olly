@@ -23,6 +23,15 @@ The format is based on Keep a Changelog, and this project follows Semantic Versi
 - Fixed underflow in horizontal offset computation for aligned lines with `saturating_sub`
 - Fixed margin click detection to reject clicks outside rendered text span for aligned lines
 - Fixed stale chat metadata persistence when showing welcome/no-session screens
+- Fixed scroll actions (mouse wheel, arrow keys, page up/down) clearing text selection - selection now persists across scrolls since indices reference the full visual lines buffer
+
+### Enhanced
+- **Drag-to-scroll selection**: Auto-scroll activates when dragging near chat area edges (3-row threshold), allowing selection beyond visible viewport
+- **Shift+click range selection**: Click to set anchor, then Shift+click to select entire range precisely
+- Selection preservation during auto-scroll using dedicated scroll methods that don't clear selection state
+- 2 new unit tests for Shift+click input resolution
+- Selection preservation during auto-scroll using dedicated scroll methods that don't clear selection state
+- 2 new unit tests for Shift+click input resolution
 
 ## [0.0.12] - 2026-03-31
 
