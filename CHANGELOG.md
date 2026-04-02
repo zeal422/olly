@@ -4,6 +4,26 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project follows Semantic Versioning.
 
+## [0.0.17] - 2026-04-02
+
+### Fixed
+
+- **BUG #1:** Prevent `String::truncate()` panics on multi-byte UTF-8 boundaries by using boundary-safe truncation in tool output handling.
+- **BUG #2:** Preserve structured assistant `tool_calls` through storage and replay by adding `tool_calls` field to `Message`.
+- **BUG #3:** Persist intermediate assistant tool-call messages to history before tool results, ensuring proper tool-call → tool-result chain.
+- **BUG #4:** Don't replace tool-only assistant turns with `(no response content)` placeholder when tool calls are present.
+- **BUG #5:** Fixed keybinding modifier matching to use exact equality instead of subset, preventing unmodified bindings from shadowing modified ones.
+- **BUG #6:** Use CLI model override when opening workspace session during bootstrap, not just for initial app model.
+- **BUG #7:** Apply imported conversation title to first (pre-created) conversation during workspace import.
+- **BUG #8:** Preserve excess `..` components in path cleaning to honestly reflect escape attempts.
+ - **BUG #9:** Preserve root separator (`\`) on Windows paths in `clean_path` reconstruction.
+ - **Improvement:** Refactored BUG #3 error handling for clarity using `map_err().ok()` pattern.
+ - **Improvement:** Added Windows-specific test for BUG #9 root separator preservation.
+
+### Added
+
+- Regression tests for each bug fix to prevent future regressions.
+
 ## [0.0.16] - 2026-04-02
 
 ### Added

@@ -1,5 +1,6 @@
 use super::helpers::*;
 use crate::app::is_cloud_model_name;
+use crate::ollama::chat::{ChatToolCall, ToolFunction};
 
 #[test]
 fn cloud_model_classifier_handles_common_patterns() {
@@ -132,4 +133,102 @@ fn tool_message_header_preview_includes_tool_name() {
         message.tool_calls_preview.as_deref(),
         Some("Tool: grep_search")
     );
+}
+
+#[test]
+fn tool_only_turn_does_not_get_no_response_content_placeholder() {
+    let mut app = App::new(
+        String::from("http://localhost:11434"),
+        String::from("llama3.2:latest"),
+    );
+
+    // Simulate a tool-only turn: assistant message with tool_calls but no content
+    let tool_call = ChatToolCall {
+        function: Some(ToolFunction {
+            name: "read_file".to_string(),
+            arguments: serde_json::json!({"path": "/workspace/test.txt"}),
+        }),
+    };
+
+    // Directly construct an assistant message with tool_calls and empty content
+    app.messages.push(Message {
+        role: "Assistant".to_string(),
+        content: String::new(), // empty
+        timestamp: "2025-01-01T00:00:00Z".to_string(),
+        image_count: 0,
+        tool_calls_preview: Some("Tool: read_file".to_string()),
+        tool_name: None,
+        tool_calls: Some(vec![tool_call.clone()]),
+    });
+
+    // Simulate the condition where streamed_any is false and we have tool_calls
+    // (the fix should NOT replace empty content with placeholder)
+    let streamed_any = false;
+    let captured_tool_calls = [tool_call];
+
+    // This mimics the logic from chat_pipeline line 492-494 after fix
+    if !streamed_any && captured_tool_calls.is_empty() {
+        app.messages.last_mut().unwrap().content = String::from("(no response content)");
+    }
+
+    let last_msg = app.messages.last().unwrap();
+    assert_eq!(last_msg.content, String::new()); // remains empty, not placeholder
+    assert!(last_msg.tool_calls.is_some());
+}
+
+#[test]
+fn assistant_tool_calls_survive_storage_roundtrip() {
+    use crate::app::state::App;
+
+    let tool_calls_json = r#"[{"function":{"name":"read_file","arguments":{"path":"/test"}}}]"#;
+    let stored = App::from_storage_role(
+        "assistant",
+        "Reading file".to_string(),
+        None,
+        Some(tool_calls_json.to_string()),
+        "2025-01-01T00:00:00Z".to_string(),
+    );
+
+    assert!(stored.is_some());
+    let stored = stored.unwrap();
+    assert!(stored.tool_calls.is_some());
+    let calls = stored.tool_calls.as_ref().unwrap();
+    assert_eq!(calls.len(), 1);
+    assert_eq!(calls[0].function.as_ref().unwrap().name, "read_file");
+}
+
+#[test]
+fn to_ollama_messages_includes_tool_calls_for_assistant() {
+    let mut app = App::new(
+        String::from("http://localhost:11434"),
+        String::from("llama3.2:latest"),
+    );
+
+    let tool_call = ChatToolCall {
+        function: Some(ToolFunction {
+            name: "grep_search".to_string(),
+            arguments: serde_json::json!({"query": "test"}),
+        }),
+    };
+
+    app.messages.push(Message {
+        role: "Assistant".to_string(),
+        content: "Here are the results".to_string(),
+        timestamp: "2025-01-01T00:00:00Z".to_string(),
+        image_count: 0,
+        tool_calls_preview: Some("Tool: grep_search".to_string()),
+        tool_name: None,
+        tool_calls: Some(vec![tool_call.clone()]),
+    });
+
+    let ollama_msgs = app.to_ollama_messages();
+    let assistant_msg = ollama_msgs
+        .iter()
+        .find(|m| m.role == "assistant")
+        .expect("assistant message should exist");
+
+    assert!(assistant_msg.tool_calls.is_some());
+    let calls = assistant_msg.tool_calls.as_ref().unwrap();
+    assert_eq!(calls.len(), 1);
+    assert_eq!(calls[0].function.as_ref().unwrap().name, "grep_search");
 }

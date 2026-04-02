@@ -118,3 +118,33 @@ fn mouse_move_without_drag_returns_noop() {
     };
     assert_eq!(resolve_mouse_event(moved), InputAction::Noop);
 }
+
+#[test]
+fn unmodified_binding_does_not_match_modified_event() {
+    let config = KeybindingsConfig::default();
+    let bindings = InputBindings::from_config(&config);
+
+    // Default: newline is plain Enter
+    let plain_enter = KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE);
+    let ctrl_enter = KeyEvent::new(KeyCode::Enter, KeyModifiers::CONTROL);
+
+    // Plain Enter should match newline binding, NOT send binding
+    assert_eq!(
+        resolve_key_event_with_bindings(plain_enter, &bindings, ""),
+        InputAction::NewLine
+    );
+    assert_ne!(
+        resolve_key_event_with_bindings(plain_enter, &bindings, ""),
+        InputAction::Send
+    );
+
+    // Ctrl+Enter should match send binding, NOT newline binding
+    assert_eq!(
+        resolve_key_event_with_bindings(ctrl_enter, &bindings, ""),
+        InputAction::Send
+    );
+    assert_ne!(
+        resolve_key_event_with_bindings(ctrl_enter, &bindings, ""),
+        InputAction::NewLine
+    );
+}

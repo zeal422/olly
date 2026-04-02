@@ -269,6 +269,7 @@ fn clear_active_workspace_state_resets_all_related_fields() {
         image_count: 0,
         tool_calls_preview: None,
         tool_name: None,
+        tool_calls: None,
     });
     app.status = String::from("busy");
 

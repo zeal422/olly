@@ -26,6 +26,7 @@ impl App {
             image_count,
             tool_calls_preview,
             tool_name: None,
+            tool_calls: None,
         });
         self.chat_scroll = 0;
     }
@@ -48,6 +49,7 @@ impl App {
             image_count: 0,
             tool_calls_preview,
             tool_name,
+            tool_calls: None,
         });
         self.chat_scroll = 0;
     }

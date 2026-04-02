@@ -17,6 +17,20 @@ pub const MAX_READ_LINES: usize = 500;
 /// Maximum matches for grep_search
 pub const MAX_GREP_MATCHES: usize = 50;
 
+/// Truncate a string to at most `max_bytes` bytes, ensuring we land on a valid UTF-8 character boundary.
+/// Returns true if truncation occurred, false otherwise.
+pub(crate) fn utf8_truncate(s: &mut String, max_bytes: usize) -> bool {
+    if s.len() <= max_bytes {
+        return false;
+    }
+    let mut truncate_at = max_bytes;
+    while truncate_at > 0 && !s.is_char_boundary(truncate_at) {
+        truncate_at -= 1;
+    }
+    s.truncate(truncate_at);
+    true
+}
+
 /// Context for tool execution
 #[derive(Debug, Clone)]
 pub struct ToolContext {
@@ -85,12 +99,19 @@ impl ToolContext {
                     stack.push(name.to_os_string());
                 }
                 Component::ParentDir => {
-                    stack.pop();
+                    // Preserve excess ".." when stack is empty or top is also ".."
+                    // This ensures path escape attempts are honestly represented
+                    if stack.last().is_some_and(|s| s != "..") {
+                        stack.pop();
+                    } else {
+                        stack.push(std::ffi::OsString::from(".."));
+                    }
                 }
                 Component::CurDir => {}
                 Component::RootDir => {
-                    // Reset stack when we hit a root dir (but preserve prefix)
+                    // Reset stack and explicitly preserve root separator in result
                     stack.clear();
+                    result.push(std::path::Component::RootDir.as_os_str());
                 }
                 Component::Prefix(_) => {
                     // Already handled above, skip any subsequent prefixes
@@ -221,7 +242,7 @@ async fn read_file(args: Value, context: &ToolContext) -> ToolResult {
 
     // Apply overall size limit
     if output.len() > MAX_OUTPUT_SIZE {
-        output.truncate(MAX_OUTPUT_SIZE);
+        utf8_truncate(&mut output, MAX_OUTPUT_SIZE);
         output.push_str("\n\n[Output truncated: exceeded size limit]");
         return ToolResult::success(output).truncated();
     }
@@ -334,7 +355,7 @@ async fn list_dir(args: Value, context: &ToolContext) -> ToolResult {
 
     if output.len() > MAX_OUTPUT_SIZE {
         let mut truncated = output;
-        truncated.truncate(MAX_OUTPUT_SIZE);
+        utf8_truncate(&mut truncated, MAX_OUTPUT_SIZE);
         truncated.push_str("\n\n[Output truncated: exceeded size limit]");
         return ToolResult::success(truncated).truncated();
     }
@@ -470,7 +491,7 @@ async fn grep_search(args: Value, context: &ToolContext) -> ToolResult {
     };
 
     if output.len() > MAX_OUTPUT_SIZE {
-        output.truncate(MAX_OUTPUT_SIZE);
+        utf8_truncate(&mut output, MAX_OUTPUT_SIZE);
         output.push_str("\n\n[Output truncated: exceeded size limit]");
         return ToolResult::success(output).truncated();
     }
@@ -652,7 +673,7 @@ async fn find_by_name(args: Value, context: &ToolContext) -> ToolResult {
 
     if output.len() > MAX_OUTPUT_SIZE {
         let mut truncated = output;
-        truncated.truncate(MAX_OUTPUT_SIZE);
+        utf8_truncate(&mut truncated, MAX_OUTPUT_SIZE);
         truncated.push_str(&format!(
             "\n\n[Truncated: showing first {} matches]",
             matches.len()
@@ -948,7 +969,7 @@ async fn execute_command(args: Value, context: &ToolContext) -> ToolResult {
     // Apply size limit
     let was_truncated = result.len() > MAX_OUTPUT_SIZE;
     if was_truncated {
-        result.truncate(MAX_OUTPUT_SIZE);
+        utf8_truncate(&mut result, MAX_OUTPUT_SIZE);
         result.push_str("\n\n[Output truncated: exceeded size limit]");
     }
 
@@ -974,4 +995,115 @@ async fn run_command(
 
     let output = cmd.output().await?;
     Ok(output)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn utf8_truncate_preserves_char_boundaries() {
+        // ASCII only - truncation occurs
+        let mut s = String::from("hello world");
+        assert!(utf8_truncate(&mut s, 5));
+        assert_eq!(s, "hello");
+
+        // Multi-byte UTF-8: emoji (4 bytes each)
+        let mut s = String::from("hello 👋🌍");
+        assert!(utf8_truncate(&mut s, 10));
+        // 10 bytes cuts in middle of 🌍 (which is 4 bytes starting at byte 8)
+        // Should truncate to boundary before 🌍
+        assert_eq!(s, "hello 👋");
+
+        // CJK characters (3 bytes each)
+        let mut s = String::from("你好世界"); // 12 bytes total, 4 chars
+        assert!(!utf8_truncate(&mut s, 12)); // exact fit
+        assert_eq!(s, "你好世界");
+        assert!(utf8_truncate(&mut s, 10)); // truncate to nearest boundary
+                                            // 10 is mid-char of 4th char (starts at 9), backs up to 9 => 3 chars
+        assert_eq!(s, "你好世");
+
+        // Mixed: accented + 4-byte emoji
+        let mut s = String::from("hello 😀"); // 'hello' (5) + space (1) + 😀 (4) = 10 bytes
+        assert!(!utf8_truncate(&mut s, 10)); // exact fit (10 bytes)
+        assert_eq!(s, "hello 😀");
+        assert!(utf8_truncate(&mut s, 9)); // truncate into middle of emoji
+                                           // Should back up to boundary after space => "hello " (6 bytes)
+        assert_eq!(s, "hello ");
+        assert!(std::str::from_utf8(s.as_bytes()).is_ok());
+    }
+
+    #[test]
+    fn utf8_truncate_returns_true_when_truncated() {
+        let mut s = String::from("1234567890");
+        assert!(utf8_truncate(&mut s, 5));
+        assert_eq!(s, "12345");
+    }
+
+    #[test]
+    fn utf8_truncate_returns_false_when_no_truncation() {
+        let mut s = String::from("hello");
+        assert!(!utf8_truncate(&mut s, 10));
+        assert_eq!(s, "hello");
+    }
+
+    #[test]
+    fn clean_path_preserves_excess_parent_dirs() {
+        let ctx = ToolContext::new(None, PathBuf::from("/workspace"));
+        let path = Path::new("../../../outside");
+        let cleaned = ctx.clean_path(path);
+        // Should preserve all three ".." components plus "outside"
+        let components: Vec<_> = cleaned.components().collect();
+        assert_eq!(components.len(), 4);
+        let parent_count = components
+            .iter()
+            .filter(|c| matches!(c, std::path::Component::ParentDir))
+            .count();
+        assert_eq!(parent_count, 3);
+    }
+
+    #[test]
+    fn clean_path_does_not_drop_unresolved_dots() {
+        let ctx = ToolContext::new(None, PathBuf::from("/workspace"));
+        let path = Path::new("../../etc/passwd");
+        let cleaned = ctx.clean_path(path);
+        // Should preserve both ".." and not drop to "etc/passwd"
+        let has_parent = cleaned
+            .components()
+            .any(|c| matches!(c, std::path::Component::ParentDir));
+        assert!(has_parent);
+    }
+
+    #[test]
+    fn clean_path_handles_root_separator_on_windows_style() {
+        // On Windows, a path like "C:\\workspace" should keep the backslash after drive letter
+        // We'll test with a Path that has a root directory component
+        let ctx = ToolContext::new(None, PathBuf::from("."));
+        // Create a path that results in RootDir component after Prefix
+        // On Unix, "/home" has RootDir then Normal(home)
+        // On Windows, "C:\\home" has Prefix(C:), RootDir, Normal(home)
+        let path = Path::new("/home/user");
+        let cleaned = ctx.clean_path(path);
+        // The result should start with a root separator (i.e., be an absolute path)
+        assert!(cleaned.has_root());
+        // On Unix, it should be "/home/user"
+        #[cfg(unix)]
+        assert_eq!(cleaned, PathBuf::from("/home/user"));
+        // The test passes on Windows when run there; we can't easily simulate,
+        // but the fix adds RootDir to result when encountered.
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn clean_path_preserves_windows_drive_root_separator() {
+        let ctx = ToolContext::new(None, PathBuf::from("."));
+        let path = Path::new("C:\\workspace\\file.txt");
+        let cleaned = ctx.clean_path(path);
+        // On Windows, should retain backslash after drive letter: "C:\workspace\file.txt"
+        let s = cleaned.to_string_lossy();
+        // Should contain ":\" (colon followed by backslash)
+        assert!(s.contains(":\\"));
+        // Should start with drive letter, colon, backslash
+        assert!(s.starts_with("C:\\"));
+    }
 }

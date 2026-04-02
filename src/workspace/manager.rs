@@ -436,6 +436,10 @@ impl WorkspaceManager {
             }
             if index == 0 {
                 active_conversation = conversation_id;
+                // Apply the imported title to the pre-created conversation (BUG #7)
+                if let Some(title) = conversation.title {
+                    self.storage.rename_conversation(conversation_id, &title)?;
+                }
             }
         }
 
@@ -481,4 +485,66 @@ fn normalize_root_path(path: &Path) -> Result<String, WorkspaceError> {
     }
     let canonical = std::fs::canonicalize(absolute)?;
     Ok(canonical.to_string_lossy().into_owned())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    #[test]
+    fn import_applies_first_conversation_title() {
+        // BUG #7 regression test: first imported conversation title should be applied
+        let temp_dir = TempDir::new().unwrap();
+        let db_path = temp_dir.path().join("test.db");
+        let manager = WorkspaceManager::open(&db_path).unwrap();
+
+        // Build an export payload to import (must use private ExportWorkspace/ExportConversation)
+        let payload = ExportWorkspace {
+            version: 1,
+            name: "Imported".to_string(),
+            root_path: None,
+            context_paths: Vec::new(),
+            conversations: vec![
+                ExportConversation {
+                    title: Some("First Conversation".to_string()),
+                    messages: Vec::new(),
+                },
+                ExportConversation {
+                    title: Some("Second Conversation".to_string()),
+                    messages: Vec::new(),
+                },
+            ],
+        };
+
+        // Write payload to a temp file (simulate import from file)
+        let import_file = temp_dir.path().join("import.json");
+        let raw = serde_json::to_string_pretty(&payload).unwrap();
+        std::fs::write(&import_file, raw).unwrap();
+
+        // Import creates a new workspace from the payload
+        let result = manager
+            .import_workspace_json(&import_file, "default-model")
+            .unwrap();
+
+        // Verify: should have 2 conversations in the imported workspace
+        let convs = manager.list_conversations(result.workspace_id).unwrap();
+        assert_eq!(convs.len(), 2);
+
+        // The first conversation (which reused the pre-created one) should now have the imported title
+        let first = convs
+            .iter()
+            .find(|c| c.title.as_deref() == Some("First Conversation"))
+            .expect("first conversation should have imported title");
+
+        // The second conversation should have its title as well
+        let second = convs
+            .iter()
+            .find(|c| c.title.as_deref() == Some("Second Conversation"))
+            .expect("second conversation should have its title");
+
+        // The active conversation from import result should be the first one
+        assert_eq!(first.id, result.conversation_id);
+        assert_eq!(second.id, result.conversation_id + 1);
+    }
 }

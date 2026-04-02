@@ -146,6 +146,7 @@ pub struct Message {
     pub image_count: usize,
     pub tool_calls_preview: Option<String>,
     pub tool_name: Option<String>,
+    pub tool_calls: Option<Vec<ChatToolCall>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
@@ -504,7 +505,11 @@ impl App {
                         m.content.clone(),
                     ))
                 } else {
-                    Some(ChatMessage::new(role, m.content.clone()))
+                    let mut msg = ChatMessage::new(role, m.content.clone());
+                    if role == "assistant" {
+                        msg.tool_calls = m.tool_calls.clone();
+                    }
+                    Some(msg)
                 }
             })
             .collect()
@@ -544,6 +549,7 @@ impl App {
         } else {
             None
         };
+        let tool_calls = parsed_tool_calls.clone();
         Some(Message {
             role: display_role.to_string(),
             content,
@@ -551,6 +557,7 @@ impl App {
             image_count,
             tool_calls_preview: tool_preview,
             tool_name,
+            tool_calls,
         })
     }
 

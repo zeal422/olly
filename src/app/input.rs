@@ -105,7 +105,7 @@ impl InputBinding {
     }
 
     fn matches(&self, event: &KeyEvent) -> bool {
-        event.code == self.code && event.modifiers.contains(self.modifiers)
+        event.code == self.code && event.modifiers == self.modifiers
     }
 }
 

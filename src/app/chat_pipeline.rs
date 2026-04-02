@@ -387,7 +387,28 @@ pub(crate) async fn send_prompt(
             tool_name: None,
             thinking: None,
         };
-        tool_loop_messages.push(assistant_msg);
+        tool_loop_messages.push(assistant_msg.clone());
+
+        // Persist intermediate assistant tool-call message to history (BUG #3)
+        let tool_calls_json = serde_json::to_string(&current_tool_calls)
+            .map_err(|err| app.push_system(format!("Failed to serialize tool_calls: {err}")))
+            .ok();
+        if let Some(json) = &tool_calls_json {
+            if let Err(err) = history::append_message_with_meta(
+                manager,
+                session.conversation_id,
+                "assistant",
+                &assistant_msg.content,
+                None,
+                Some(json),
+            ) {
+                app.push_system(format!("Failed to persist assistant tool-call step: {err}"));
+                app.set_toast(
+                    crate::app::state::ToastLevel::Error,
+                    "Failed to save assistant tool-call step",
+                );
+            }
+        }
 
         // Clear assistant content for next iteration
         app.messages[assistant_index].content.clear();
@@ -489,7 +510,7 @@ pub(crate) async fn send_prompt(
     app.is_loading = false;
     app.connection_status = crate::app::state::ConnectionStatus::Online;
 
-    if !streamed_any {
+    if !streamed_any && captured_tool_calls.is_empty() {
         app.messages[assistant_index].content = String::from("(no response content)");
     }
 

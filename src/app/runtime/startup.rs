@@ -72,7 +72,7 @@ where
         .cloned()
         .or_else(|| app.workspaces.first().cloned());
     if let Some(workspace) = initial_workspace {
-        let next = manager.open_workspace_session(workspace.id, &config.defaults.model)?;
+        let next = manager.open_workspace_session(workspace.id, &startup_model)?;
         session.workspace_id = next.workspace_id;
         session.conversation_id = next.conversation_id;
         session.preset_id = next.preset_id;
