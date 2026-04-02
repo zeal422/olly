@@ -1,379 +1,152 @@
 # Olly - Project Context
 
-## Project Overview
+**Olly** is a Rust TUI client for Ollama. Keyboard-driven chat with tool execution, workspace persistence, and text selection.
 
-**Olly** is a Rust terminal UI (TUI) client for Ollama, designed for fast chat workflows with coding-focused features. Built with `ratatui`, it provides a keyboard-driven interface for interacting with local and cloud Ollama models.
+## Getting Started
 
-### Core Features
+For LLMs and agents working on this codebase, read these files in order:
+
+1. **`SOURCE_MAP.md`** — Module dependency graph and import relationships
+2. **`docs/architecture.md`** — Module hierarchy, data flow, design decisions
+3. **`docs/features.md`** — User-facing features, shortcuts, commands
+4. **`docs/workflow.md`** — Event loop, input pipeline, rendering cycle
+
+## Core Features
+
 - Streaming chat with live token rendering
-- Model listing and switching (local + cloud models)
-- **Tool execution system** with confirmation modals, policy controls (auto/confirm), and safety sandbox
-- Workspace and per-workspace session persistence with SQLite
-- Full-text search over stored messages
-- File-context ingestion with safety guardrails
-- Markdown rendering with optional syntax highlighting
-- Extensive slash-command system (`/search`, `/export`, `/checkpoint`, `/workspace`, `/session`, `/attach`, `/model`, `/url`, `/themes`, `/tools`)
-- Configurable keybindings and runtime Ollama URL
-- 8 built-in UI themes with live preview
-- Hardened Windows console startup/resize behavior to reduce native scrollbar and layout artifacts
-- Mouse-wheel chat scrolling with bounded overscroll behavior and consistent speed
-- **Right-click paste support** with cross-platform clipboard integration and focus-aware behavior
-- **Mouse drag text selection and Ctrl+C copy** for chat messages with visual highlighting and proper reflow alignment
-- Per-session footer context telemetry (`ctx:used/max`) based on Ollama usage/model-window metadata
-- Session/model footer context telemetry restoration across app restarts via persisted UI runtime state
+- Model listing/switching (local + cloud)
+- **Tool execution** with confirmation modals, policy controls (auto/confirm), workspace sandbox
+- Workspace/session persistence with SQLite
+- Full-text search, file-context ingestion, markdown with syntax highlighting
+- 8 themes with live preview, configurable keybindings
+- Mouse drag text selection, Shift+click range selection, Ctrl+C copy
+- Right-click paste, mouse-wheel scroll, drag-to-scroll
 
-### Architecture
+## Architecture
 
-The codebase follows a modular structure with clear separation of concerns:
+Modular structure with clear separation of concerns:
 
 ```
 src/
-|-- main.rs                  # CLI entry point with clap argument parsing
+|-- main.rs                  # CLI entry point
 |-- lib.rs                   # Module exports
-|-- app/                     # Core application logic and TUI
-|   |-- mod.rs               # Module coordinator + re-exports (~325 lines)
-|   |-- state.rs             # App struct, state types, snapshot/restore (~1,061 lines)
-|   |-- messages_and_conversation.rs  # Message push operations (~74 lines)
-|   |-- input_editor.rs      # Cursor movement and text editing (~140 lines)
-|   |-- chat_navigation.rs   # Scroll and selection management (~63 lines)
-|   |-- overlay_toast.rs     # Toast, help overlay, pending confirmations (~58 lines)
-|   |-- theme_picker.rs      # Theme picker operations (~53 lines)
-|   |-- context.rs           # Application context
-|   |-- input.rs             # Input handling / key action mapping
+|-- app/
+|   |-- mod.rs               # Coordinator + re-exports (~325 lines)
+|   |-- state.rs             # App struct + methods (~1,061 lines)
+|   |-- input_editor.rs      # Cursor movement and text editing
+|   |-- chat_navigation.rs   # Scroll and selection management
+|   |-- messages_and_conversation.rs  # Message push operations
+|   |-- overlay_toast.rs     # Toast, help overlay, confirmations
+|   |-- theme_picker.rs      # Theme picker state
+|   |-- input.rs             # InputAction enum, key/mouse resolution
+|   |-- chat_pipeline.rs     # Send + stream + persist
 |   |-- commands/            # Slash-command parser/dispatcher/handlers
-|   |-- runtime/             # Startup, event loop, overlay/key routing, shutdown
-|   |-- platform/            # Platform-specific console/window helpers
-|   |-- autocomplete/        # Command suggestion providers
-|   |-- domain/              # Workspace/session transition helpers
-|   |-- chat_pipeline.rs     # Send + stream + persistence pipeline
-|   |-- tools/               # Tool registry, executor, and safety controls
+|   |-- runtime/             # Startup, event loop, key actions, shutdown
+|   |-- platform/            # Windows console helpers
+|   |-- autocomplete/        # Command suggestions
+|   |-- domain/              # Workspace/session helpers
+|   |-- tools/               # Tool registry, executor, safety
 |   |-- mod_tests/           # App-level unit tests
-|   `-- tui/                 # Terminal UI rendering components
-|       |-- mod.rs           # Render orchestrator + shared utils (~765 lines)
-|       |-- chat.rs          # Chat panel rendering (~338 lines)
-|       |-- input.rs         # Input panel rendering (~257 lines)
-|       |-- sidebar.rs       # Sidebar and status bar rendering (~304 lines)
-|       |-- palette.rs       # Theme palette definitions (~428 lines)
-|       |-- markdown.rs      # Markdown rendering with syntax highlighting (~301 lines)
-|       `-- modals.rs        # Modal rendering (~227 lines)
-|-- config/                  # Configuration management (config.toml, platform paths)
-|-- history/                 # Chat history and SQLite persistence
-|-- ollama/                  # Ollama API client (streaming chat, models)
-`-- workspace/               # Workspace and session management
+|   `-- tui/                 # Rendering components
+|       |-- mod.rs           # Draw orchestration + shared utils (~765 lines)
+|       |-- chat.rs          # Chat panel
+|       |-- input.rs         # Input panel
+|       |-- sidebar.rs       # Sidebar + status bar
+|       |-- palette.rs       # Theme palettes
+|       |-- markdown.rs      # Markdown + syntax highlighting
+|       `-- modals.rs        # Modal rendering
+|-- config/                  # Configuration
+|-- history/                 # Chat history persistence
+|-- ollama/                  # Ollama API client
+`-- workspace/               # Workspace/session SQLite management
 ```
 
-**Note**: The codebase underwent major refactoring in v0.0.14, splitting monolithic modules:
-- `app/mod.rs`: 1,732 → ~325 lines (81% reduction)
-- `app/tui/mod.rs`: 2,194 → ~765 lines (65% reduction)
-
-### Documentation
-
-Comprehensive documentation is available in `docs/`:
-
-| Document | Purpose |
-|----------|---------|
-| `docs/architecture.md` | Module hierarchy, data flow, tool system design |
-| `docs/features.md` | User-facing feature catalog, shortcuts, commands |
-| `docs/workflow.md` | Event loop, input pipeline, rendering cycle |
-| `docs/testing.md` | Test strategy, patterns, coverage guidelines |
-| `docs/design-ui-ux.md` | Layout, themes, selection, modals, marquee |
-| `docs/refactoring.md` | Module boundaries, extraction principles |
-| `docs/release.md` | Build process, versioning, distribution |
-| `docs/troubleshooting.md` | Common issues and solutions |
-| `docs/security.md` | Security model, tool safety, data protection |
-### Key Technologies
-- **TUI Framework**: `ratatui` 0.29.0 with `crossterm` for terminal handling
-- **Async Runtime**: `tokio` with multi-threaded runtime
-- **HTTP Client**: `reqwest` with rustls-tls for Ollama API communication
-- **Database**: `rusqlite` for local SQLite persistence
-- **CLI Parsing**: `clap` with derive macros
-- **Serialization**: `serde` + `serde_json`
-- **Syntax Highlighting**: `syntect` for markdown code blocks
-- **Clipboard Integration**: `copypasta` for cross-platform clipboard support
-- **Error Handling**: `thiserror` for custom error types
+Full module dependency graph: see `SOURCE_MAP.md`.
+Refactoring history and principles: see `docs/refactoring.md`.
 
 ## Building and Running
 
-### Prerequisites
-- Rust stable toolchain (configured via `rust-toolchain.toml`)
-- Ollama server running locally (default: `http://localhost:11434`)
-
-### Build Commands
-
 ```bash
-# Debug build
-cargo build
-
-# Release build
-cargo build --release
-
-# Run with defaults
-cargo run
-
-# Run with custom Ollama URL and model
+cargo build              # Debug
+cargo build --release    # Release
+cargo run                # Run with defaults
 cargo run -- --url http://localhost:11434 --model llama3.2:latest
 ```
 
 ### Quality Checks
 
 ```bash
-# PowerShell
-./scripts/check.ps1
-
-# Bash
-./scripts/check.sh
+./scripts/check.ps1   # or ./scripts/check.sh
 ```
 
-These run:
-- `cargo fmt --all -- --check`
-- `cargo clippy --all-targets --all-features -- -D warnings`
-- `cargo build`
-- `cargo test --all-targets --all-features`
+Runs: `cargo fmt --check`, `cargo clippy -D warnings`, `cargo build`, `cargo test`.
 
 ### Development Scripts
 
 | Script | Purpose |
 |--------|---------|
-| `scripts/check.ps1` / `.sh` | Full quality gate (fmt + clippy + build + test) |
-| `scripts/fmt-fix.ps1` / `.sh` | Auto-apply formatting and clippy fixes |
-| `scripts/test-unit.ps1` / `.sh` | Run unit tests only (fast) |
-| `scripts/test-integration.ps1` / `.sh` | Run integration tests only |
-| `scripts/run-dev.ps1` / `.sh` | Quick dev launch with default flags |
-| `scripts/clean.ps1` / `.sh` | Remove build artifacts (with confirmation) |
-| `scripts/audit.ps1` / `.sh` | Check dependencies for vulnerabilities |
-| `scripts/coverage.ps1` / `.sh` | Generate test coverage report |
+| `scripts/fmt-fix.ps1` / `.sh` | Auto-apply formatting + clippy fixes |
+| `scripts/test-unit.ps1` / `.sh` | Unit tests only (fast) |
+| `scripts/test-integration.ps1` / `.sh` | Integration tests only |
+| `scripts/run-dev.ps1` / `.sh` | Quick dev launch |
+| `scripts/clean.ps1` / `.sh` | Remove build artifacts |
+| `scripts/audit.ps1` / `.sh` | Check dependency vulnerabilities |
+| `scripts/coverage.ps1` / `.sh` | Generate coverage report |
 | `scripts/loc.ps1` / `.sh` | Count lines per module |
 | `scripts/docs-check.ps1` / `.sh` | Verify documentation health |
-| `scripts/build-installer.ps1` | Build Windows installer (Inno Setup required) |
-| `scripts/release.ps1` / `.sh` | Release preparation (changelog + package) |
-| `scripts/install-hooks.ps1` / `.sh` | Install pre-commit hooks |
 
-### Running Tests
+Full script reference: see `docs/release.md`.
 
-```bash
-# All tests
-cargo test --all-targets --all-features
+## Key Shortcuts
 
-# Library tests only
-cargo test --lib
+| Key | Action |
+|-----|--------|
+| `Ctrl+Enter` | Send message |
+| `Enter` | Newline / execute slash command |
+| `Ctrl+Q` | Quit (press twice) |
+| `F1` | Toggle help |
+| `Esc` | Close dialogs, clear toasts |
+| `Tab` | Switch focus (sidebar/chat) |
+| `Up/Down` | Scroll chat or move selection |
+| `PgUp/PgDn` | Fast scroll |
+| `Mouse wheel` | Scroll chat |
+| `Right-click` | Paste (chat input only) |
+| `Ctrl+C` | Copy selected text |
 
-# Specific test file
-cargo test --test streaming_parser
-```
-
-### Building Windows Installer
-
-```powershell
-# Requires Inno Setup 6 (ISCC.exe)
-./scripts/build-installer.ps1
-```
-
-Output: `dist/windows-installer/Olly-Setup-<version>.exe`
-
-### Release Preparation
-
-```bash
-# PowerShell
-./scripts/release.ps1
-
-# Bash
-./scripts/release.sh
-```
-
-Uses `git-cliff` with `.git-cliff.toml` for changelog generation.
+Full shortcut reference: see `docs/features.md`.
 
 ## Configuration
 
-### Config File Location
-- **Linux**: `~/.config/olly/config.toml`
-- **macOS**: `~/Library/Application Support/olly/config.toml`
-- **Windows**: `%APPDATA%\olly\config.toml`
+Config: `~/.config/olly/config.toml` (Linux), `%APPDATA%\olly\config.toml` (Windows).
+Data: `~/.local/share/olly/` (Linux), `%LOCALAPPDATA%\olly/` (Windows).
 
-### Data Storage
-- **Linux**: `~/.local/share/olly/`
-- **macOS**: `~/Library/Application Support/olly/`
-- **Windows**: `%LOCALAPPDATA%\olly/`
-
-### Example config.toml
-
-```toml
-[ollama]
-url = "http://localhost:11434"
-timeout_secs = 300
-
-[defaults]
-model = "llama3.2:latest"
-workspace = "Default Workspace"
-
-[storage]
-db_path = "/path/to/olly/workspaces.db"
-
-[ui]
-syntax_highlighting = true
-
-[keybindings]
-send = "Ctrl+Enter"
-newline = "Enter"
-quit = "Ctrl+Q"
-help = "F1"
-dismiss = "Esc"
-switch_focus = "Tab"
-autocomplete = "Tab"
-```
+Full config reference: see `docs/features.md`.
 
 ## Development Conventions
 
-### Code Style
-- **Formatting**: `rustfmt` with `max_width = 100`, no hard tabs
-- **Linting**: `clippy` with all warnings treated as errors
-- **Edition**: Rust 2021
+- **Formatting**: `rustfmt`, `max_width = 100`, no hard tabs
+- **Linting**: `clippy -D warnings`
+- **Tests**: `tests/` for integration, `src/app/mod_tests/` for unit. Every bug fix needs a reproducer test.
+- **Commits**: Clear messages, focused PRs. Update `README.md` if config/commands change. Update `SOURCE_MAP.md` if module structure changes.
 
-### Testing Practices
-- Tests are in `tests/` directory as integration tests
-- Common test utilities in `tests/common/`
-- Every bug fix should include a reproducer test
-- Keep shared fixtures deterministic (no real network calls)
-- Test categories:
-  - `streaming_*` - Streaming response handling
-  - `persistence_*` - SQLite storage operations
-  - `workspace_*` - Workspace/session management
-  - `config_*` - Configuration handling
-  - `ollama_*` - Ollama client behavior
-  - `tools_*` - Tool execution, registry, safety controls
-  - `smoke_*` - Boot and basic functionality
-
-### Commit Guidelines
-- Clear, concise commit messages
-- Focused PRs with single responsibility
-- Document user-visible behavior changes
-- Update `README.md` if config/commands change
-
-### Pre-commit Hook
-
-```bash
-# PowerShell
-./scripts/install-hooks.ps1
-
-# Bash
-./scripts/install-hooks.sh
-```
-
-## Key Commands and Shortcuts
-
-### Chat Operations
-- `Ctrl+Enter`: Send message
-- `Enter`: Insert newline (or execute slash command)
-- `Ctrl+Q`: Quit (press twice)
-- `F1`: Toggle help
-- `Esc`: Close dialogs and clear toasts
-- `Tab`: Switch focus (sidebar/chat)
-- `Up/Down`: Scroll chat or move selection
-- `PgUp/PgDn`: Fast scroll
-- `Mouse wheel`: Scroll chat history (with clamped bounds)
-- `Right-click`: Paste clipboard content (chat input and slash commands only)
-- `Ctrl+C`: Copy selected text from chat (when text is selected via mouse drag)
-
-### Slash Commands
-- `/commands` - List available commands
-- `/models` - List/refresh/add/remove models
-- `/themes` - Open theme picker modal
-- `/search <query>` - Search chat history (FTS)
-- `/export json|md <path>` - Export conversation
-- `/checkpoint save|restore <name>` - Checkpoint management
-- `/workspace list|switch|create|rename|delete` - Workspace operations
-- `/session list|new|switch|rename|delete` - Session operations (`/session delete` opens confirm modal for selected sidebar session by default; optional explicit `<id|title>` target supported)
-- `/attach <image_path>` - Queue image attachment
-- `/clear-attachments` - Clear queued attachments
-- `/model <name>` - Switch active model
-- `/url <http://host:port>` - Update Ollama URL
-- `/tools` - Show tools status and available commands
-- `/tools enable|on` - Enable tool execution
-- `/tools disable|off` - Disable tool execution
-- `/tools policy auto|confirm` - Set tool execution policy
-- `/tools list` - List available tools
-- `/tools allow <tool>` - Add tool to allowlist
-- `/tools deny <tool>` - Add tool to denylist
-- `/tools reset` - Clear allowlist and denylist
-- Tool command safety details:
-  - `execute_command` rejects path-like executable tokens (`/`, `\`, or leading `.`)
-  - executable token validation allows exact allowlist roots plus immediate ASCII-digit variants
-  - only `.exe`, `.cmd`, and `.bat` wrapper suffixes are normalized
-  - dotted suffix forms like `git.evil` are rejected
-
-## Project Structure Summary
-
-| Directory/File | Purpose |
-|----------------|---------|
-| `src/app/mod.rs` | Module coordinator + re-exports (~325 lines) |
-| `src/app/state.rs` | App struct, state types, snapshot/restore (~1,061 lines) |
-| `src/app/messages_and_conversation.rs` | Message push operations (~74 lines) |
-| `src/app/input_editor.rs` | Cursor movement and text editing (~140 lines) |
-| `src/app/chat_navigation.rs` | Scroll and selection management (~63 lines) |
-| `src/app/overlay_toast.rs` | Toast, help overlay, pending confirmations (~58 lines) |
-| `src/app/theme_picker.rs` | Theme picker operations (~53 lines) |
-| `src/app/commands/` | Slash-command parser/dispatcher/handler modules |
-| `src/app/runtime/` | Startup/event-loop/key/overlay/shutdown runtime modules |
-| `src/app/platform/` | Platform-specific console/window behavior helpers |
-| `src/app/autocomplete/` | Command-scoped autocomplete providers |
-| `src/app/domain/` | Workspace/session domain helpers |
-| `src/app/chat_pipeline.rs` | Chat send/stream/persist pipeline |
-| `src/app/tools/` | Tool registry, executor, safety controls |
-| `src/app/mod_tests/` | App-level unit tests |
-| `src/app/tui/mod.rs` | Render orchestrator + shared utils (~765 lines) |
-| `src/app/tui/chat.rs` | Chat panel rendering (~338 lines) |
-| `src/app/tui/input.rs` | Input panel rendering (~257 lines) |
-| `src/app/tui/sidebar.rs` | Sidebar and status bar rendering (~304 lines) |
-| `src/app/tui/palette.rs` | Theme palette definitions (~428 lines) |
-| `src/app/tui/markdown.rs` | Markdown rendering with syntax highlighting (~301 lines) |
-| `src/app/tui/modals.rs` | Modal rendering (~227 lines) |
-| `src/ollama/` | Ollama API client with streaming support |
-| `src/workspace/` | Workspace and session SQLite management |
-| `src/history/` | Chat history persistence |
-| `src/config/` | Configuration loading and defaults |
-| `tests/` | Integration tests |
-| `scripts/` | Build, check, release, installer scripts |
-| `docs/` | Documentation (architecture, features, workflow, testing, design, refactoring, release, troubleshooting, security) |
-| `installer/` | Windows installer configuration |
-| `.git-cliff.toml` | Changelog generation config |
 ## Agent Discipline & Git Safety
 
-### CRITICAL RULES (Non-Negotiable)
+### CRITICAL RULES
 
-1. **NEVER run destructive Git commands on uncommitted work without explicit user confirmation**
-   - `git reset --hard`, `git clean -fd`, `git checkout <file>` (without `--`), `git restore <file>` - all require user confirmation
-   - Always show: `git status` first and state what will be lost
-   - Ask: "This will discard X uncommitted changes. Proceed? [Yes/No]"
-
-2. **When frustrated or stuck, STOP and ask for guidance**
-   - If you're making repeated errors, corrupted files, or feel panicked: **pause immediately**
-   - Tell the user: "I'm having difficulty with X. Should I try a different approach or let you take over?"
-   - Never act impulsively when emotional - take a breath, reassess
-
-3. **Always verify current state before making changes**
-   - Read the file(s) you're about to modify and confirm you understand the current structure
-   - Check `git status` to see what's already changed
-   - If unsure what a change will affect, ask the user
-
-4. **Make small, reversible changes with explicit saves**
-   - Use `git add` + `git commit` frequently to checkpoint progress
-   - Prefer `edit` tool with precise oldString/newString matches over bulk replacements
-   - When experimenting, create a new branch first: `git checkout -b temp-experiment`
-
-5. **If you destroy work, immediately acknowledge and offer recovery options**
-   - Tell the user exactly what happened
-   - Check reflog: `git reflog` (may recover if file was staged)
-   - Offer to rebuild from scratch if needed
-   - Do NOT hide or minimize the mistake
+1. **NEVER run destructive Git commands without explicit user confirmation** — always show `git status` first and ask.
+2. **When stuck, STOP and ask** — never act impulsively.
+3. **Always verify current state** — read files before modifying, check `git status`.
+4. **Make small, reversible changes** — use precise edits, commit frequently.
+5. **Acknowledge mistakes immediately** — offer recovery options, do not hide errors.
 
 ### Mental Discipline Checklist
 
-Before performing any operation that could lose data:
-- [ ] Have I read the file(s) recently to understand their current state?
-- [ ] Does `git status` show any uncommitted changes that could be lost?
-- [ ] Is there a way to achieve the goal without destructive operations?
-- [ ] Would creating a commit or stash first be safer?
-- [ ] Am I acting out of frustration or is this a clear, reasoned step?
-- [ ] Have I communicated the plan to the user and received confirmation?
+Before any data-risking operation:
+- [ ] Read the file(s) recently?
+- [ ] `git status` shows no uncommitted changes that could be lost?
+- [ ] Is there a non-destructive alternative?
+- [ ] Would a commit or stash be safer?
+- [ ] Am I acting out of frustration?
+- [ ] Communicated the plan and received confirmation?
 
 **Remember: It's better to ask for permission than to apologize for irreversible damage.**
-
