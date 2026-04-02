@@ -31,13 +31,13 @@ src/
 |-- main.rs                  # CLI entry point with clap argument parsing
 |-- lib.rs                   # Module exports
 |-- app/                     # Core application logic and TUI
-|   |-- mod.rs               # Module coordinator + re-exports (~300 lines)
-|   |-- state.rs             # App struct, state types, snapshot/restore
-|   |-- messages_and_conversation.rs  # Message push operations
-|   |-- input_editor.rs      # Cursor movement and text editing
-|   |-- chat_navigation.rs   # Scroll and selection management
-|   |-- overlay_toast.rs     # Toast, help overlay, pending confirmations
-|   |-- theme_picker.rs      # Theme picker operations
+|   |-- mod.rs               # Module coordinator + re-exports (~325 lines)
+|   |-- state.rs             # App struct, state types, snapshot/restore (~1,061 lines)
+|   |-- messages_and_conversation.rs  # Message push operations (~74 lines)
+|   |-- input_editor.rs      # Cursor movement and text editing (~140 lines)
+|   |-- chat_navigation.rs   # Scroll and selection management (~63 lines)
+|   |-- overlay_toast.rs     # Toast, help overlay, pending confirmations (~58 lines)
+|   |-- theme_picker.rs      # Theme picker operations (~53 lines)
 |   |-- context.rs           # Application context
 |   |-- input.rs             # Input handling / key action mapping
 |   |-- commands/            # Slash-command parser/dispatcher/handlers
@@ -49,13 +49,13 @@ src/
 |   |-- tools/               # Tool registry, executor, and safety controls
 |   |-- mod_tests/           # App-level unit tests
 |   `-- tui/                 # Terminal UI rendering components
-|       |-- mod.rs           # Render orchestrator (~250 lines)
-|       |-- chat.rs          # Chat panel rendering
-|       |-- input.rs         # Input panel rendering
-|       |-- sidebar.rs       # Sidebar and status bar rendering
-|       |-- palette.rs       # Theme palette definitions
-|       |-- markdown.rs      # Markdown rendering with syntax highlighting
-|       `-- modals.rs        # Modal rendering
+|       |-- mod.rs           # Render orchestrator + shared utils (~765 lines)
+|       |-- chat.rs          # Chat panel rendering (~338 lines)
+|       |-- input.rs         # Input panel rendering (~257 lines)
+|       |-- sidebar.rs       # Sidebar and status bar rendering (~304 lines)
+|       |-- palette.rs       # Theme palette definitions (~428 lines)
+|       |-- markdown.rs      # Markdown rendering with syntax highlighting (~301 lines)
+|       `-- modals.rs        # Modal rendering (~227 lines)
 |-- config/                  # Configuration management (config.toml, platform paths)
 |-- history/                 # Chat history and SQLite persistence
 |-- ollama/                  # Ollama API client (streaming chat, models)
@@ -63,8 +63,24 @@ src/
 ```
 
 **Note**: The codebase underwent major refactoring in v0.0.14, splitting monolithic modules:
-- `app/mod.rs`: 1,732 → ~300 lines (82% reduction)
-- `app/tui/mod.rs`: 2,194 → ~250 lines (89% reduction)
+- `app/mod.rs`: 1,732 → ~325 lines (81% reduction)
+- `app/tui/mod.rs`: 2,194 → ~765 lines (65% reduction)
+
+### Documentation
+
+Comprehensive documentation is available in `docs/`:
+
+| Document | Purpose |
+|----------|---------|
+| `docs/architecture.md` | Module hierarchy, data flow, tool system design |
+| `docs/features.md` | User-facing feature catalog, shortcuts, commands |
+| `docs/workflow.md` | Event loop, input pipeline, rendering cycle |
+| `docs/testing.md` | Test strategy, patterns, coverage guidelines |
+| `docs/design-ui-ux.md` | Layout, themes, selection, modals, marquee |
+| `docs/refactoring.md` | Module boundaries, extraction principles |
+| `docs/release.md` | Build process, versioning, distribution |
+| `docs/troubleshooting.md` | Common issues and solutions |
+| `docs/security.md` | Security model, tool safety, data protection |
 ### Key Technologies
 - **TUI Framework**: `ratatui` 0.29.0 with `crossterm` for terminal handling
 - **Async Runtime**: `tokio` with multi-threaded runtime
@@ -111,7 +127,26 @@ cargo run -- --url http://localhost:11434 --model llama3.2:latest
 These run:
 - `cargo fmt --all -- --check`
 - `cargo clippy --all-targets --all-features -- -D warnings`
+- `cargo build`
 - `cargo test --all-targets --all-features`
+
+### Development Scripts
+
+| Script | Purpose |
+|--------|---------|
+| `scripts/check.ps1` / `.sh` | Full quality gate (fmt + clippy + build + test) |
+| `scripts/fmt-fix.ps1` / `.sh` | Auto-apply formatting and clippy fixes |
+| `scripts/test-unit.ps1` / `.sh` | Run unit tests only (fast) |
+| `scripts/test-integration.ps1` / `.sh` | Run integration tests only |
+| `scripts/run-dev.ps1` / `.sh` | Quick dev launch with default flags |
+| `scripts/clean.ps1` / `.sh` | Remove build artifacts (with confirmation) |
+| `scripts/audit.ps1` / `.sh` | Check dependencies for vulnerabilities |
+| `scripts/coverage.ps1` / `.sh` | Generate test coverage report |
+| `scripts/loc.ps1` / `.sh` | Count lines per module |
+| `scripts/docs-check.ps1` / `.sh` | Verify documentation health |
+| `scripts/build-installer.ps1` | Build Windows installer (Inno Setup required) |
+| `scripts/release.ps1` / `.sh` | Release preparation (changelog + package) |
+| `scripts/install-hooks.ps1` / `.sh` | Install pre-commit hooks |
 
 ### Running Tests
 
@@ -269,13 +304,13 @@ autocomplete = "Tab"
 
 | Directory/File | Purpose |
 |----------------|---------|
-| `src/app/mod.rs` | Module coordinator + re-exports (~300 lines) |
-| `src/app/state.rs` | App struct, state types, snapshot/restore |
-| `src/app/messages_and_conversation.rs` | Message push operations |
-| `src/app/input_editor.rs` | Cursor movement and text editing |
-| `src/app/chat_navigation.rs` | Scroll and selection management |
-| `src/app/overlay_toast.rs` | Toast, help overlay, pending confirmations |
-| `src/app/theme_picker.rs` | Theme picker operations |
+| `src/app/mod.rs` | Module coordinator + re-exports (~325 lines) |
+| `src/app/state.rs` | App struct, state types, snapshot/restore (~1,061 lines) |
+| `src/app/messages_and_conversation.rs` | Message push operations (~74 lines) |
+| `src/app/input_editor.rs` | Cursor movement and text editing (~140 lines) |
+| `src/app/chat_navigation.rs` | Scroll and selection management (~63 lines) |
+| `src/app/overlay_toast.rs` | Toast, help overlay, pending confirmations (~58 lines) |
+| `src/app/theme_picker.rs` | Theme picker operations (~53 lines) |
 | `src/app/commands/` | Slash-command parser/dispatcher/handler modules |
 | `src/app/runtime/` | Startup/event-loop/key/overlay/shutdown runtime modules |
 | `src/app/platform/` | Platform-specific console/window behavior helpers |
@@ -284,20 +319,20 @@ autocomplete = "Tab"
 | `src/app/chat_pipeline.rs` | Chat send/stream/persist pipeline |
 | `src/app/tools/` | Tool registry, executor, safety controls |
 | `src/app/mod_tests/` | App-level unit tests |
-| `src/app/tui/mod.rs` | Render orchestrator (~250 lines) |
-| `src/app/tui/chat.rs` | Chat panel rendering |
-| `src/app/tui/input.rs` | Input panel rendering |
-| `src/app/tui/sidebar.rs` | Sidebar and status bar rendering |
-| `src/app/tui/palette.rs` | Theme palette definitions |
-| `src/app/tui/markdown.rs` | Markdown rendering with syntax highlighting |
-| `src/app/tui/modals.rs` | Modal rendering |
+| `src/app/tui/mod.rs` | Render orchestrator + shared utils (~765 lines) |
+| `src/app/tui/chat.rs` | Chat panel rendering (~338 lines) |
+| `src/app/tui/input.rs` | Input panel rendering (~257 lines) |
+| `src/app/tui/sidebar.rs` | Sidebar and status bar rendering (~304 lines) |
+| `src/app/tui/palette.rs` | Theme palette definitions (~428 lines) |
+| `src/app/tui/markdown.rs` | Markdown rendering with syntax highlighting (~301 lines) |
+| `src/app/tui/modals.rs` | Modal rendering (~227 lines) |
 | `src/ollama/` | Ollama API client with streaming support |
 | `src/workspace/` | Workspace and session SQLite management |
 | `src/history/` | Chat history persistence |
 | `src/config/` | Configuration loading and defaults |
 | `tests/` | Integration tests |
 | `scripts/` | Build, check, release, installer scripts |
-| `docs/` | Documentation including release policy |
+| `docs/` | Documentation (architecture, features, workflow, testing, design, refactoring, release, troubleshooting, security) |
 | `installer/` | Windows installer configuration |
 | `.git-cliff.toml` | Changelog generation config |
 ## Agent Discipline & Git Safety

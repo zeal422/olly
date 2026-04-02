@@ -62,11 +62,11 @@ PowerShell:
 
 ## Release Policy
 
-Release process details are in [docs/RELEASE_POLICY.md](docs/RELEASE_POLICY.md).
+Release process details are in [docs/release.md](docs/release.md).
 
 ## Security
 
-If you discover a security issue, please open a private report with maintainers instead of posting public exploit details.
+Security model and tool execution safety details are in [docs/security.md](docs/security.md).
 
 ## License
 

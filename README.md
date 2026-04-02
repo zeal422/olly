@@ -15,23 +15,42 @@ Olly is a Rust terminal UI client for Ollama. It focuses on a fast chat loop for
 - Markdown rendering with optional syntax highlighting.
 - Slash-command power features (`/search`, `/export`, `/checkpoint`, `/workspace`, `/session`, `/attach`, `/model`, `/url`, `/tools`).
 - Configurable keybindings and runtime Ollama URL.
+- 8 built-in UI themes with live preview.
 - Improved Windows console stability: startup sizing is normalized and resize handling avoids native scrollbar/layout glitches.
 - Mouse-wheel chat scrolling with bounded overscroll behavior and consistent speed.
+- **Right-click paste support** with cross-platform clipboard integration.
+- **Mouse drag text selection and Ctrl+C copy** for chat messages with visual highlighting.
+- **Drag-to-scroll selection** — auto-scroll activates when dragging near chat edges.
+- **Shift+click range selection** — click to set anchor, Shift+click to select range.
 - Per-session footer telemetry including context usage (`ctx:used/max`) against model context window.
 - Footer context telemetry is restored across app restarts for the same session/model context.
+
+## Documentation
+
+| Document | Purpose |
+|----------|---------|
+| [Architecture](docs/architecture.md) | Module hierarchy, data flow, tool system design |
+| [Features](docs/features.md) | Complete feature catalog, shortcuts, commands |
+| [Workflow](docs/workflow.md) | Event loop, input pipeline, rendering cycle |
+| [Testing](docs/testing.md) | Test strategy, patterns, coverage guidelines |
+| [Design & UI/UX](docs/design-ui-ux.md) | Layout, themes, selection, modals, marquee |
+| [Refactoring](docs/refactoring.md) | Module boundaries, extraction principles |
+| [Release](docs/release.md) | Build process, versioning, distribution |
+| [Troubleshooting](docs/troubleshooting.md) | Common issues and solutions |
+| [Security](docs/security.md) | Security model, tool safety, data protection |
 
 ## Internal Architecture
 
 The app keeps user-facing behavior stable while separating responsibilities in `src/app/`:
 
 ### Core Application Modules (Refactored in v0.0.14)
-- `state.rs`: App struct, state types, snapshot/restore operations
-- `messages_and_conversation.rs`: Message push operations and conversation handling
-- `input_editor.rs`: Cursor movement and text editing operations
-- `chat_navigation.rs`: Scroll and selection management
-- `overlay_toast.rs`: Toast notifications, help overlay, pending confirmations
-- `theme_picker.rs`: Theme picker operations
-- `mod.rs`: Module coordinator with re-exports (~300 lines, down from 1,732)
+- `state.rs`: App struct, state types, snapshot/restore operations (~1,061 lines)
+- `messages_and_conversation.rs`: Message push operations and conversation handling (~74 lines)
+- `input_editor.rs`: Cursor movement and text editing operations (~140 lines)
+- `chat_navigation.rs`: Scroll and selection management (~63 lines)
+- `overlay_toast.rs`: Toast notifications, help overlay, pending confirmations (~58 lines)
+- `theme_picker.rs`: Theme picker operations (~53 lines)
+- `mod.rs`: Module coordinator with re-exports (~325 lines, down from 1,732)
 
 ### Supporting Modules
 - `commands/`: slash-command parse, route, and handler modules.
@@ -40,15 +59,16 @@ The app keeps user-facing behavior stable while separating responsibilities in `
 - `chat_pipeline.rs`: send/stream/persist flow for chat messages.
 - `domain/`: workspace/session transition and context-state helpers.
 - `autocomplete/`: command-scoped suggestion providers.
+- `tools/`: tool registry, executor, and safety controls.
 
 ### TUI Rendering Modules (Refactored in v0.0.14)
-- `tui/mod.rs`: Render orchestrator (~250 lines, down from 2,194)
-- `tui/chat.rs`: Chat panel rendering
-- `tui/input.rs`: Input panel rendering  
-- `tui/sidebar.rs`: Sidebar and status bar rendering
-- `tui/palette.rs`: Theme palette definitions
-- `tui/markdown.rs`: Markdown rendering with syntax highlighting
-- `tui/modals.rs`: Modal rendering
+- `tui/mod.rs`: Render orchestrator + shared utilities (~765 lines, down from 2,194)
+- `tui/chat.rs`: Chat panel rendering (~338 lines)
+- `tui/input.rs`: Input panel rendering (~257 lines)
+- `tui/sidebar.rs`: Sidebar and status bar rendering (~304 lines)
+- `tui/palette.rs`: Theme palette definitions (~428 lines)
+- `tui/markdown.rs`: Markdown rendering with syntax highlighting (~301 lines)
+- `tui/modals.rs`: Modal rendering (~227 lines)
 
 ## Installation
 
@@ -156,6 +176,7 @@ autocomplete = "Tab"
 - `PgUp` / `PgDn`: faster chat scroll
 - `Mouse wheel`: scroll chat history (with clamped bounds)
 - `Right-click`: paste clipboard content (chat input and slash commands only)
+- `Ctrl+C`: copy selected text from chat (when text is selected via mouse drag)
 - `Enter` (sidebar focused): activate selection (section headers collapse/expand)
 
 ## Slash Commands
@@ -262,6 +283,20 @@ PowerShell:
 ```
 
 Both scripts run: `cargo fmt --all -- --check`, `cargo clippy --all-targets --all-features -- -D warnings`, `cargo build`, and `cargo test --all-targets --all-features`.
+
+### Additional Development Scripts
+
+| Script | Purpose |
+|--------|---------|
+| `scripts/fmt-fix.ps1` / `.sh` | Auto-apply formatting and clippy fixes |
+| `scripts/test-unit.ps1` / `.sh` | Run unit tests only (fast) |
+| `scripts/test-integration.ps1` / `.sh` | Run integration tests only |
+| `scripts/run-dev.ps1` / `.sh` | Quick dev launch with default flags |
+| `scripts/clean.ps1` / `.sh` | Remove build artifacts (with confirmation) |
+| `scripts/audit.ps1` / `.sh` | Check dependencies for vulnerabilities |
+| `scripts/coverage.ps1` / `.sh` | Generate test coverage report |
+| `scripts/loc.ps1` / `.sh` | Count lines per module |
+| `scripts/docs-check.ps1` / `.sh` | Verify documentation health |
 
 ## Release Process
 

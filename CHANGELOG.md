@@ -4,6 +4,34 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project follows Semantic Versioning.
 
+## [0.0.15] - 2026-04-02
+
+### Added
+- **Comprehensive documentation suite** in `docs/`:
+  - `architecture.md` — Module hierarchy, data flow diagrams, tool system design, dependencies
+  - `features.md` — Complete feature catalog, keyboard shortcuts, slash commands, themes, config
+  - `workflow.md` — Event loop, input pipeline, action handling, chat send, selection, rendering cycle
+  - `testing.md` — Test strategy, categories, patterns, coverage guidelines, quality gates
+  - `design-ui-ux.md` — Layout structure, rendering pipeline, theme system, selection/copy, modals, marquee
+  - `refactoring.md` — Module boundaries, extraction principles, why files are sized as they are
+  - `release.md` — Build process, versioning, installer, distribution, release checklist
+  - `troubleshooting.md` — Common issues and solutions for startup, chat, selection, tools, workspace, themes
+  - `security.md` — Security model, tool execution safety, workspace sandboxing, data protection, threat model
+- All documentation includes mermaid diagrams where appropriate (architecture, workflow, design)
+- Merged tool runtime decisions (ADR) into `architecture.md` under Tool System section
+- Updated `CONTRIBUTING.md` with correct links to `release.md` and `security.md`
+
+- **Development scripts** for faster workflows:
+  - `scripts/fmt-fix.ps1` / `.sh` — Auto-apply formatting and clippy fixes
+  - `scripts/test-unit.ps1` / `.sh` — Run unit tests only (fast)
+  - `scripts/test-integration.ps1` / `.sh` — Run integration tests only
+  - `scripts/run-dev.ps1` / `.sh` — Quick dev launch with default flags
+  - `scripts/clean.ps1` / `.sh` — Remove build artifacts (with confirmation)
+  - `scripts/audit.ps1` / `.sh` — Check dependencies for vulnerabilities
+  - `scripts/coverage.ps1` / `.sh` — Generate test coverage report (HTML or text)
+  - `scripts/loc.ps1` / `.sh` — Count lines per module
+  - `scripts/docs-check.ps1` / `.sh` — Verify documentation health and broken links
+
 ## [0.0.14] - 2026-04-01
 
 ### Refactored
