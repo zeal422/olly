@@ -1,4 +1,4 @@
-use crate::app::{SessionEntry, WorkspaceEntry};
+use crate::app::state::{SessionEntry, WorkspaceEntry};
 
 use super::providers;
 

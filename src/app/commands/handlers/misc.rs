@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use crate::{
-    app::{commands::CommandRoute, load_conversation_into_app, App, ToastLevel},
+    app::{commands::CommandRoute, load_conversation_into_app, state::ToastLevel, App},
     workspace::{manager::WorkspaceManager, WorkspaceSession},
 };
 

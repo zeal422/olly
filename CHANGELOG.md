@@ -4,6 +4,38 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project follows Semantic Versioning.
 
+## [0.0.14] - 2026-04-01
+
+### Refactored
+- **Major codebase refactoring** to reduce monolithic modules and improve maintainability:
+  - Split `src/app/mod.rs` from 1,732 lines into focused modules (~82% reduction):
+    - `src/app/state.rs` - App struct, state types, snapshot/restore (~1,429 lines)
+    - `src/app/messages_and_conversation.rs` - Message push operations (~150 lines)
+    - `src/app/input_editor.rs` - Cursor movement and text editing (~250 lines)
+    - `src/app/chat_navigation.rs` - Scroll and selection management (~150 lines)
+    - `src/app/overlay_toast.rs` - Toast, help overlay, pending confirmations (~200 lines)
+    - `src/app/theme_picker.rs` - Theme picker operations (~100 lines)
+  - Split `src/app/tui/mod.rs` from 2,194 lines into focused modules (~89% reduction):
+    - `src/app/tui/chat.rs` - Chat panel rendering (346 lines)
+    - `src/app/tui/input.rs` - Input panel rendering (255 lines)
+    - `src/app/tui/sidebar.rs` - Sidebar and status bar rendering (~400 lines)
+    - `src/app/tui/palette.rs` - Theme palette definitions (408 lines)
+    - `src/app/tui/markdown.rs` - Markdown rendering with syntax highlighting (~300 lines)
+    - `src/app/tui/modals.rs` - Modal rendering (unchanged, 227 lines)
+- All quality gates maintained:
+  - `cargo fmt --all -- --check` ✅
+  - `cargo clippy --all-targets --all-features -- -D warnings` ✅
+  - `cargo test --all-targets --all-features` ✅ (262 tests pass)
+- No user-facing behavior changes - all functionality preserved
+- No breaking changes to public APIs or module interfaces
+
+### Technical Details
+- Module boundaries are now clearly defined by responsibility
+- Improved code navigability and maintainability
+- Better separation of concerns between state, behavior, and rendering
+- All existing tests pass without modification
+- Re-exports maintain backward compatibility for external callers
+
 ## [0.0.13] - 2026-04-01
 
 ### Added

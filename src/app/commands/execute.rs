@@ -1,9 +1,11 @@
 use crate::{
     app::commands::handlers::tools::handle_tools_command,
-    app::{App, ToastLevel},
+    app::{state::ToastLevel, App},
     ollama,
     workspace::{manager::WorkspaceManager, WorkspaceSession},
 };
+
+use crate::app::state::ConnectionStatus;
 
 pub(crate) async fn execute_slash_command(
     app: &mut App,
@@ -21,7 +23,7 @@ pub(crate) async fn execute_slash_command(
         let client = reqwest::Client::new();
         match ollama::models::list_models(&client, &app.url).await {
             Ok(models) => {
-                app.connection_status = crate::app::ConnectionStatus::Online;
+                app.connection_status = ConnectionStatus::Online;
                 if !models.is_empty() {
                     app.models = models;
                     if !app.models.iter().any(|m| m == &app.model) {
@@ -31,7 +33,7 @@ pub(crate) async fn execute_slash_command(
                 app.set_toast(ToastLevel::Success, "Model list refreshed");
             }
             Err(err) => {
-                app.connection_status = crate::app::ConnectionStatus::Offline;
+                app.connection_status = ConnectionStatus::Offline;
                 app.push_system(format!("Model refresh failed: {err}"));
                 app.set_toast(ToastLevel::Error, "Model refresh failed");
             }
@@ -52,7 +54,7 @@ pub(crate) async fn execute_slash_command(
         match ollama::models::pull_model(&client, &app.url, &candidate).await {
             Ok(()) => match ollama::models::list_models(&client, &app.url).await {
                 Ok(models) => {
-                    app.connection_status = crate::app::ConnectionStatus::Online;
+                    app.connection_status = ConnectionStatus::Online;
                     app.models = models;
                     if !app.models.iter().any(|m| m == &app.model) {
                         if let Some(first) = app.models.first().cloned() {
@@ -67,7 +69,7 @@ pub(crate) async fn execute_slash_command(
                 }
             },
             Err(err) => {
-                app.connection_status = crate::app::ConnectionStatus::Offline;
+                app.connection_status = ConnectionStatus::Offline;
                 app.push_system(format!("Model add failed: {err}"));
                 app.set_toast(ToastLevel::Error, "Model add failed");
             }
@@ -85,7 +87,7 @@ pub(crate) async fn execute_slash_command(
         match ollama::models::delete_model(&client, &app.url, &candidate).await {
             Ok(()) => match ollama::models::list_models(&client, &app.url).await {
                 Ok(models) => {
-                    app.connection_status = crate::app::ConnectionStatus::Online;
+                    app.connection_status = ConnectionStatus::Online;
                     app.models = models;
                     if app.model == candidate {
                         if let Some(first) = app.models.first().cloned() {
@@ -100,7 +102,7 @@ pub(crate) async fn execute_slash_command(
                 }
             },
             Err(err) => {
-                app.connection_status = crate::app::ConnectionStatus::Offline;
+                app.connection_status = ConnectionStatus::Offline;
                 app.push_system(format!("Model remove failed: {err}"));
                 app.set_toast(ToastLevel::Error, "Model remove failed");
             }

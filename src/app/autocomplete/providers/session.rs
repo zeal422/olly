@@ -1,4 +1,4 @@
-use crate::app::SessionEntry;
+use crate::app::state::SessionEntry;
 
 fn session_subcommand_suggestions() -> Vec<String> {
     vec![

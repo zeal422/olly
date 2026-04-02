@@ -1,4 +1,5 @@
 use super::helpers::*;
+use crate::app::is_cloud_model_name;
 
 #[test]
 fn cloud_model_classifier_handles_common_patterns() {

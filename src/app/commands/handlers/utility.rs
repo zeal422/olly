@@ -2,7 +2,11 @@ use std::{fs, path::PathBuf};
 
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 
-use crate::app::{commands::CommandRoute, App, PendingImage, ToastLevel, COMMAND_SUGGESTIONS};
+use crate::app::{
+    commands::CommandRoute,
+    state::{PendingImage, ToastLevel},
+    App, COMMAND_SUGGESTIONS,
+};
 
 pub(crate) fn handle(
     app: &mut App,

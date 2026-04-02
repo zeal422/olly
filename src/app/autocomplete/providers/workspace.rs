@@ -1,6 +1,6 @@
 use std::{env, fs, path::PathBuf};
 
-use crate::app::WorkspaceEntry;
+use crate::app::state::WorkspaceEntry;
 
 fn workspace_subcommand_suggestions() -> Vec<String> {
     vec![

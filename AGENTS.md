@@ -24,14 +24,20 @@
 
 ### Architecture
 
-The codebase follows a modular structure:
+The codebase follows a modular structure with clear separation of concerns:
 
 ```
 src/
 |-- main.rs                  # CLI entry point with clap argument parsing
 |-- lib.rs                   # Module exports
 |-- app/                     # Core application logic and TUI
-|   |-- mod.rs               # App state + orchestration adapters
+|   |-- mod.rs               # Module coordinator + re-exports (~300 lines)
+|   |-- state.rs             # App struct, state types, snapshot/restore
+|   |-- messages_and_conversation.rs  # Message push operations
+|   |-- input_editor.rs      # Cursor movement and text editing
+|   |-- chat_navigation.rs   # Scroll and selection management
+|   |-- overlay_toast.rs     # Toast, help overlay, pending confirmations
+|   |-- theme_picker.rs      # Theme picker operations
 |   |-- context.rs           # Application context
 |   |-- input.rs             # Input handling / key action mapping
 |   |-- commands/            # Slash-command parser/dispatcher/handlers
@@ -40,14 +46,25 @@ src/
 |   |-- autocomplete/        # Command suggestion providers
 |   |-- domain/              # Workspace/session transition helpers
 |   |-- chat_pipeline.rs     # Send + stream + persistence pipeline
-|   |-- tools/                 # Tool registry, executor, and safety controls
-|   |-- mod_tests/           # App-level unit tests extracted from mod.rs
+|   |-- tools/               # Tool registry, executor, and safety controls
+|   |-- mod_tests/           # App-level unit tests
 |   `-- tui/                 # Terminal UI rendering components
+|       |-- mod.rs           # Render orchestrator (~250 lines)
+|       |-- chat.rs          # Chat panel rendering
+|       |-- input.rs         # Input panel rendering
+|       |-- sidebar.rs       # Sidebar and status bar rendering
+|       |-- palette.rs       # Theme palette definitions
+|       |-- markdown.rs      # Markdown rendering with syntax highlighting
+|       `-- modals.rs        # Modal rendering
 |-- config/                  # Configuration management (config.toml, platform paths)
 |-- history/                 # Chat history and SQLite persistence
 |-- ollama/                  # Ollama API client (streaming chat, models)
 `-- workspace/               # Workspace and session management
 ```
+
+**Note**: The codebase underwent major refactoring in v0.0.14, splitting monolithic modules:
+- `app/mod.rs`: 1,732 → ~300 lines (82% reduction)
+- `app/tui/mod.rs`: 2,194 → ~250 lines (89% reduction)
 ### Key Technologies
 - **TUI Framework**: `ratatui` 0.29.0 with `crossterm` for terminal handling
 - **Async Runtime**: `tokio` with multi-threaded runtime
@@ -252,7 +269,13 @@ autocomplete = "Tab"
 
 | Directory/File | Purpose |
 |----------------|---------|
-| `src/app/mod.rs` | Core App struct + orchestration adapters |
+| `src/app/mod.rs` | Module coordinator + re-exports (~300 lines) |
+| `src/app/state.rs` | App struct, state types, snapshot/restore |
+| `src/app/messages_and_conversation.rs` | Message push operations |
+| `src/app/input_editor.rs` | Cursor movement and text editing |
+| `src/app/chat_navigation.rs` | Scroll and selection management |
+| `src/app/overlay_toast.rs` | Toast, help overlay, pending confirmations |
+| `src/app/theme_picker.rs` | Theme picker operations |
 | `src/app/commands/` | Slash-command parser/dispatcher/handler modules |
 | `src/app/runtime/` | Startup/event-loop/key/overlay/shutdown runtime modules |
 | `src/app/platform/` | Platform-specific console/window behavior helpers |
@@ -260,8 +283,14 @@ autocomplete = "Tab"
 | `src/app/domain/` | Workspace/session domain helpers |
 | `src/app/chat_pipeline.rs` | Chat send/stream/persist pipeline |
 | `src/app/tools/` | Tool registry, executor, safety controls |
-| `src/app/mod_tests/` | App-level unit tests formerly in `mod.rs` |
-| `src/app/tui/` | Terminal UI rendering modules |
+| `src/app/mod_tests/` | App-level unit tests |
+| `src/app/tui/mod.rs` | Render orchestrator (~250 lines) |
+| `src/app/tui/chat.rs` | Chat panel rendering |
+| `src/app/tui/input.rs` | Input panel rendering |
+| `src/app/tui/sidebar.rs` | Sidebar and status bar rendering |
+| `src/app/tui/palette.rs` | Theme palette definitions |
+| `src/app/tui/markdown.rs` | Markdown rendering with syntax highlighting |
+| `src/app/tui/modals.rs` | Modal rendering |
 | `src/ollama/` | Ollama API client with streaming support |
 | `src/workspace/` | Workspace and session SQLite management |
 | `src/history/` | Chat history persistence |

@@ -3,11 +3,11 @@ use std::path::PathBuf;
 use crate::{
     app::domain::{
         context_state::refresh_workspaces_and_sync_active,
+        sidebar::SidebarItem,
         workspace_session::{apply_workspace_session_transition, open_workspace_delete_modal},
     },
     app::{
-        next_workspace_name, unquote_command_value, workspace_help_text, App, SidebarItem,
-        ToastLevel,
+        next_workspace_name, state::ToastLevel, unquote_command_value, workspace_help_text, App,
     },
     workspace::{manager::WorkspaceManager, WorkspaceSession},
 };

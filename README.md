@@ -24,14 +24,31 @@ Olly is a Rust terminal UI client for Ollama. It focuses on a fast chat loop for
 
 The app keeps user-facing behavior stable while separating responsibilities in `src/app/`:
 
+### Core Application Modules (Refactored in v0.0.14)
+- `state.rs`: App struct, state types, snapshot/restore operations
+- `messages_and_conversation.rs`: Message push operations and conversation handling
+- `input_editor.rs`: Cursor movement and text editing operations
+- `chat_navigation.rs`: Scroll and selection management
+- `overlay_toast.rs`: Toast notifications, help overlay, pending confirmations
+- `theme_picker.rs`: Theme picker operations
+- `mod.rs`: Module coordinator with re-exports (~300 lines, down from 1,732)
+
+### Supporting Modules
 - `commands/`: slash-command parse, route, and handler modules.
 - `runtime/`: startup, event loop, key-action routing, overlay routing, terminal shutdown.
 - `platform/`: platform-specific console/window behavior helpers.
 - `chat_pipeline.rs`: send/stream/persist flow for chat messages.
 - `domain/`: workspace/session transition and context-state helpers.
 - `autocomplete/`: command-scoped suggestion providers.
-- `tui/`: rendering modules for palette/sidebar/chat/input/modals/markdown.
-- `mod_tests/`: app-level unit tests extracted from `mod.rs`.
+
+### TUI Rendering Modules (Refactored in v0.0.14)
+- `tui/mod.rs`: Render orchestrator (~250 lines, down from 2,194)
+- `tui/chat.rs`: Chat panel rendering
+- `tui/input.rs`: Input panel rendering  
+- `tui/sidebar.rs`: Sidebar and status bar rendering
+- `tui/palette.rs`: Theme palette definitions
+- `tui/markdown.rs`: Markdown rendering with syntax highlighting
+- `tui/modals.rs`: Modal rendering
 
 ## Installation
 

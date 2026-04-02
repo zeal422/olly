@@ -14,7 +14,7 @@
 use crate::app::commands::parser::ParsedCommand;
 use crate::app::tools::registry::{all_tools, get_tool};
 use crate::app::tools::ToolPolicy;
-use crate::app::{App, ToastLevel};
+use crate::app::{state::ToastLevel, App};
 
 fn known_tools_hint() -> String {
     let mut names = all_tools()

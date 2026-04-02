@@ -1,5 +1,5 @@
 use crate::{
-    app::{App, ToastLevel},
+    app::{state::ToastLevel, App},
     workspace::{manager::WorkspaceManager, WorkspaceSession},
 };
 

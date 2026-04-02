@@ -3,8 +3,8 @@ use chrono::Local;
 use crate::{
     app::domain::workspace_session::{apply_session_switch, open_session_delete_modal},
     app::{
-        session_help_text, starts_with_ignore_ascii_case, unquote_command_value, App, SidebarItem,
-        ToastLevel,
+        domain::SidebarItem, session_help_text, starts_with_ignore_ascii_case, state::ToastLevel,
+        unquote_command_value, App,
     },
     workspace::{manager::WorkspaceManager, WorkspaceSession},
 };

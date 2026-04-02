@@ -3,7 +3,7 @@ use std::time::{Duration, Instant};
 use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
 
 use crate::{
-    app::{refresh_model_context_window, tool_calls_preview, App, ToastLevel},
+    app::{refresh_model_context_window, state::ToastLevel, tool_calls_preview, App},
     history,
     ollama::chat::{chat_stream_with_tools, ChatMessage, ChatToolCall, ParsedStreamChunk},
     workspace::{manager::WorkspaceManager, WorkspaceSession},
@@ -93,7 +93,7 @@ async fn wait_for_tool_confirmation(
     step: usize,
     total_steps: usize,
 ) -> Result<ToolConfirmationDecision, Box<dyn std::error::Error>> {
-    app.pending_tool_confirmation = Some(crate::app::PendingToolConfirmation {
+    app.pending_tool_confirmation = Some(crate::app::state::PendingToolConfirmation {
         tool_call_id: format!("tool-confirm-{step}-{tool_name}"),
         tool_name: tool_name.to_string(),
         tool_args: tool_args.to_string(),
@@ -360,7 +360,7 @@ pub(crate) async fn send_prompt(
         }
 
         if let Err(err) = stream_result {
-            app.connection_status = crate::app::ConnectionStatus::Offline;
+            app.connection_status = crate::app::state::ConnectionStatus::Offline;
             app.messages[assistant_index].content = String::from("(request failed)");
             app.push_system(format!("Request failed: {err}"));
             app.set_toast(ToastLevel::Error, "Request failed");
@@ -487,7 +487,7 @@ pub(crate) async fn send_prompt(
     }
 
     app.is_loading = false;
-    app.connection_status = crate::app::ConnectionStatus::Online;
+    app.connection_status = crate::app::state::ConnectionStatus::Online;
 
     if !streamed_any {
         app.messages[assistant_index].content = String::from("(no response content)");

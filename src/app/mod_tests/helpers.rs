@@ -1,10 +1,14 @@
 pub(super) use super::super::{
     apply_saved_ui_state_with_startup_precedence, autocomplete_suggestions, handle_command,
-    is_cloud_model_name, load_ui_state_from_path, models_help_text, next_autocomplete_value,
-    save_ui_state_to_path, session_help_text, workspace_help_text, App, FocusPane, Message,
-    ModelBucket, SessionContextSnapshot, SessionEntry, SidebarItem, ToolsState, UiRuntimeState,
-    UiTheme, WorkspaceEntry,
+    load_ui_state_from_path, models_help_text, save_ui_state_to_path, session_help_text,
+    workspace_help_text, App, UiRuntimeState,
 };
+pub(super) use crate::app::domain::{ModelBucket, SidebarItem};
+pub(super) use crate::app::state::UiTheme;
+pub(super) use crate::app::state::{
+    FocusPane, Message, SessionContextSnapshot, SessionEntry, WorkspaceEntry,
+};
+pub(super) use crate::app::tools::ToolsState;
 pub(super) use crate::workspace::{manager::WorkspaceManager, WorkspaceSession};
 pub(super) use std::{
     fs,

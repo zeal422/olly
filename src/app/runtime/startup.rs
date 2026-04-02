@@ -11,8 +11,9 @@ use ratatui::{backend::CrosstermBackend, Terminal};
 use crate::{
     app::{
         apply_saved_ui_state_with_startup_precedence, load_conversation_into_app,
-        load_ui_state_from_path, refresh_model_context_window, ui_state_path_for_config, App,
-        ConnectionStatus, UiRuntimeState,
+        load_ui_state_from_path, refresh_model_context_window,
+        state::{ui_state_path_for_config, ConnectionStatus},
+        App, UiRuntimeState,
     },
     config::AppConfig,
     workspace::{manager::WorkspaceManager, WorkspaceSession},
@@ -93,7 +94,7 @@ pub(crate) async fn bootstrap(
         Err(err) => {
             app.connection_status = ConnectionStatus::Offline;
             app.set_toast(
-                crate::app::ToastLevel::Error,
+                crate::app::state::ToastLevel::Error,
                 format!("Model list unavailable: {err}"),
             );
         }
@@ -139,6 +140,6 @@ pub(crate) fn persist_initial_ui_state(
     ui_state_path: &std::path::Path,
 ) -> UiRuntimeState {
     let state = app.snapshot_ui_state();
-    let _ = crate::app::save_ui_state_to_path(ui_state_path, &state);
+    let _ = crate::app::state::save_ui_state_to_path(ui_state_path, &state);
     state
 }

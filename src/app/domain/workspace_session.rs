@@ -1,7 +1,11 @@
 use std::time::{Duration, Instant};
 
 use crate::{
-    app::{load_conversation_into_app, App, PendingSessionDelete, PendingWorkspaceDelete},
+    app::{
+        load_conversation_into_app,
+        state::{PendingSessionDelete, PendingWorkspaceDelete},
+        App,
+    },
     workspace::{manager::WorkspaceManager, WorkspaceSession},
 };
 

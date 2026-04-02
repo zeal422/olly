@@ -1,4 +1,5 @@
 use super::helpers::*;
+use crate::app::next_autocomplete_value;
 
 #[test]
 fn autocomplete_promotes_mod_to_model_command() {

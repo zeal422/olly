@@ -1,5 +1,5 @@
 use crate::{
-    app::{commands::CommandRoute, models_help_text, App, ToastLevel},
+    app::{commands::CommandRoute, models_help_text, state::ToastLevel, App},
     workspace::manager::WorkspaceManager,
 };
 
