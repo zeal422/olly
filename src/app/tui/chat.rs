@@ -44,25 +44,8 @@ pub(super) fn render_chat_panel(
     }
 
     if app.active_workspace_id <= 0 {
-        let welcome_lines = vec![
-            Line::from(Span::styled(
-                "======================================================",
-                Style::default()
-                    .fg(palette.border_active)
-                    .add_modifier(Modifier::BOLD),
-            )),
-            Line::from(Span::styled(
-                "        OLLY",
-                Style::default()
-                    .fg(palette.border_active)
-                    .add_modifier(Modifier::BOLD),
-            )),
-            Line::from(Span::styled(
-                "======================================================",
-                Style::default()
-                    .fg(palette.border_active)
-                    .add_modifier(Modifier::BOLD),
-            )),
+        let mut welcome_lines = super::preloader::animated_logo_lines_welcome();
+        welcome_lines.extend([
             Line::from(""),
             Line::from("Terminal workspace chat for local/cloud Ollama models."),
             Line::from(""),
@@ -88,7 +71,7 @@ pub(super) fn render_chat_panel(
             Line::from("4. Type a prompt and send with Ctrl+Enter"),
             Line::from(""),
             Line::from("Tip: You can also run `/workspace create New Workspace --path <folder>`."),
-        ];
+        ]);
         let welcome_height = welcome_lines.len() as u16;
         let top_padding = inner
             .height

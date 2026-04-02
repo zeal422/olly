@@ -46,6 +46,7 @@ use crate::{
     ollama::{self, chat::ChatToolCall},
     workspace::manager::WorkspaceManager,
 };
+use std::time::{Duration, Instant};
 
 pub(crate) const COMMAND_SUGGESTIONS: &[&str] = &[
     "/commands",
@@ -76,8 +77,72 @@ pub async fn run(
     url_override: Option<String>,
     model_override: Option<String>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let mut runtime = runtime::startup::bootstrap(url_override, model_override).await?;
+    // 1. Initialize terminal FIRST — user sees preloader immediately
     let mut terminal = runtime::startup::init_terminal()?;
+
+    // 2. Compute ui_state_path early for error teardown
+    let config = crate::config::AppConfig::load_or_create()?;
+    let ui_state_path = crate::app::state::ui_state_path_for_config(&config);
+
+    // 3. Create progress channel for bootstrap status updates
+    let (progress_tx, mut progress_rx) =
+        tokio::sync::watch::channel(String::from("Initializing..."));
+
+    // 4. Spawn bootstrap in background
+    let bootstrap_handle = tokio::spawn(async move {
+        let result =
+            runtime::startup::bootstrap_with_progress(url_override, model_override, |stage| {
+                let _ = progress_tx.send(stage.to_string());
+            })
+            .await;
+        result.map_err(|e| e.to_string())
+    });
+
+    // 5. Preloader render loop while bootstrap runs, then keep logo briefly on screen.
+    let preloader_started_at = Instant::now();
+    let mut bootstrap_finished_at: Option<Instant> = None;
+    loop {
+        let _ = progress_rx.borrow_and_update();
+        let status = progress_rx.borrow().clone();
+        terminal.draw(|f| crate::app::tui::render_preloader(f, &status))?;
+
+        if bootstrap_handle.is_finished() && bootstrap_finished_at.is_none() {
+            bootstrap_finished_at = Some(Instant::now());
+        }
+
+        let min_total_visible = preloader_started_at.elapsed() >= Duration::from_millis(1_400);
+        let post_ready_hold = bootstrap_finished_at
+            .map(|finished| finished.elapsed() >= Duration::from_millis(300))
+            .unwrap_or(false);
+        if bootstrap_finished_at.is_some() && min_total_visible && post_ready_hold {
+            break;
+        }
+
+        tokio::time::sleep(Duration::from_millis(80)).await;
+    }
+
+    // 6. Bootstrap complete — get result
+    let mut runtime = match bootstrap_handle.await {
+        Ok(Ok(r)) => r,
+        Ok(Err(e)) => {
+            let _ = runtime::shutdown::teardown_terminal(
+                &mut terminal,
+                &App::new(String::new(), String::new()),
+                &ui_state_path,
+            );
+            return Err(e.into());
+        }
+        Err(e) => {
+            let _ = runtime::shutdown::teardown_terminal(
+                &mut terminal,
+                &App::new(String::new(), String::new()),
+                &ui_state_path,
+            );
+            return Err(Box::new(e));
+        }
+    };
+
+    // 7. Persist UI state and enter event loop
     let mut last_saved_ui_state =
         runtime::startup::persist_initial_ui_state(&runtime.app, &runtime.ui_state_path);
 

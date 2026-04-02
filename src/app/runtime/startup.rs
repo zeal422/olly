@@ -29,10 +29,15 @@ pub(crate) struct RuntimeBootstrap {
     pub(crate) input_bindings: crate::app::input::InputBindings,
 }
 
-pub(crate) async fn bootstrap(
+pub(crate) async fn bootstrap_with_progress<F>(
     url_override: Option<String>,
     model_override: Option<String>,
-) -> Result<RuntimeBootstrap, Box<dyn std::error::Error>> {
+    mut on_progress: F,
+) -> Result<RuntimeBootstrap, Box<dyn std::error::Error>>
+where
+    F: FnMut(&str),
+{
+    on_progress("Loading config...");
     let config = AppConfig::load_or_create()?;
     let ui_state_path = ui_state_path_for_config(&config);
     let url = url_override.unwrap_or_else(|| config.ollama.url.clone());
@@ -51,6 +56,7 @@ pub(crate) async fn bootstrap(
     }
     let input_bindings = crate::app::input::InputBindings::from_config(&config.keybindings);
 
+    on_progress("Loading workspace...");
     let manager = WorkspaceManager::open(Path::new(&config.storage.db_path))?;
     let mut session = WorkspaceSession {
         workspace_id: 0,
@@ -80,6 +86,7 @@ pub(crate) async fn bootstrap(
         app.clear_active_workspace_state();
     }
 
+    on_progress("Connecting to Ollama...");
     let client = reqwest::Client::new();
     match crate::ollama::models::list_models(&client, &app.url).await {
         Ok(models) => {
@@ -100,8 +107,11 @@ pub(crate) async fn bootstrap(
         }
     }
 
+    on_progress("Loading model info...");
     app.restore_session_context_snapshot_if_match();
     refresh_model_context_window(&mut app, &client).await;
+
+    on_progress("Ready");
 
     Ok(RuntimeBootstrap {
         config,

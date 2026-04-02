@@ -128,7 +128,7 @@ Full config reference: see `docs/features.md`.
 - **Linting**: `clippy -D warnings`
 - **Tests**: `tests/` for integration, `src/app/mod_tests/` for unit. Every bug fix needs a reproducer test.
 - **Commits**: Clear messages, focused PRs. Update `README.md` if config/commands change. Update `SOURCE_MAP.md` if module structure changes.
-
+- **No Monoliths**: Never add new features to existing large files. Always create a new dedicated module file. Each file should have a single, clear responsibility. If a file grows beyond ~200 lines, consider splitting it. New features belong in their own files, not appended to existing modules. See `docs/refactoring.md` for extraction principles.
 ## Agent Discipline & Git Safety
 
 ### CRITICAL RULES

@@ -4,6 +4,21 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project follows Semantic Versioning.
 
+## [0.0.16] - 2026-04-02
+
+### Added
+- DOS Rebel `OLLY` ASCII logo integration for both startup preloader and welcome screen.
+- Shared animated logo renderer so preloader/welcome visuals stay consistent.
+
+### Fixed
+- Fixed corrupted preloader logo rendering caused by encoding issues (mojibake) by using explicit Unicode escapes for block-art glyphs.
+- Fixed welcome-screen caret flicker by disabling input cursor rendering while no workspace is active.
+
+### Modified
+- Startup preloader timing now keeps the logo visible long enough for a smoother transition (`~1.4s` minimum visibility plus a short post-ready hold).
+- Welcome-screen logo animation now runs at a slower, time-based cadence for calmer UX.
+- Animation phase selection now uses elapsed time rather than frame count to keep motion speed stable across different redraw rates.
+
 ## [0.0.15] - 2026-04-02
 
 ### Added
@@ -88,8 +103,6 @@ The format is based on Keep a Changelog, and this project follows Semantic Versi
 ### Enhanced
 - **Drag-to-scroll selection**: Auto-scroll activates when dragging near chat area edges (3-row threshold), allowing selection beyond visible viewport
 - **Shift+click range selection**: Click to set anchor, then Shift+click to select entire range precisely
-- Selection preservation during auto-scroll using dedicated scroll methods that don't clear selection state
-- 2 new unit tests for Shift+click input resolution
 - Selection preservation during auto-scroll using dedicated scroll methods that don't clear selection state
 - 2 new unit tests for Shift+click input resolution
 

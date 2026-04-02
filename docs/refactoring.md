@@ -30,7 +30,8 @@ src/app/
     ├── chat.rs            # ~344 lines - Chat panel
     ├── input.rs           # ~263 lines - Input panel
     ├── markdown.rs        # ~311 lines - Markdown + syntax
-    └── modals.rs          # ~227 lines - Modal rendering
+    ├── modals.rs          # ~227 lines - Modal rendering
+    └── preloader.rs       # ~94 lines - ASCII logo animation
 ```
 
 ## Extraction Principles

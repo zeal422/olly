@@ -29,6 +29,7 @@ graph TB
         tui_palette[tui/palette.rs<br/>Theme palettes]
         tui_md[tui/markdown.rs<br/>Markdown + syntax]
         tui_modals[tui/modals.rs<br/>Modal rendering]
+        tui_preloader[tui/preloader.rs<br/>ASCII logo animation]
     end
 
     subgraph "Runtime"
@@ -79,6 +80,7 @@ graph TB
     tui_mod --> tui_palette
     tui_mod --> tui_md
     tui_mod --> tui_modals
+    tui_mod --> tui_preloader
 
     startup --> event_loop
     event_loop --> key_actions

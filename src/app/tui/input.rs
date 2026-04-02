@@ -54,7 +54,9 @@ pub(super) fn render_input_panel(
         area,
     );
 
-    if app.focus == FocusPane::Chat || app.is_slash_command_input() {
+    let show_input_cursor = should_show_input_cursor(app);
+
+    if show_input_cursor {
         if let Some((cursor_x, cursor_y)) = input_cursor_screen_position(
             &app.input,
             app.input_cursor_char_index,
@@ -68,6 +70,11 @@ pub(super) fn render_input_panel(
     }
 
     render_autocomplete_popup(frame, app, area, palette);
+}
+
+fn should_show_input_cursor(app: &App) -> bool {
+    // Hide cursor on welcome screen (no active workspace) to avoid distracting blink.
+    app.active_workspace_id > 0 && (app.focus == FocusPane::Chat || app.is_slash_command_input())
 }
 
 /// Calculate the required height for the input panel.
@@ -253,5 +260,52 @@ fn autocomplete_background(theme: UiTheme) -> Color {
         Color::Rgb(255, 255, 255)
     } else {
         Color::Rgb(18, 24, 33)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::should_show_input_cursor;
+    use crate::app::{state::FocusPane, App};
+
+    fn new_app() -> App {
+        App::new(
+            String::from("http://localhost:11434"),
+            String::from("qwen2.5-coder:7b"),
+        )
+    }
+
+    #[test]
+    fn should_show_input_cursor_hides_on_welcome_screen() {
+        let mut app = new_app();
+        app.active_workspace_id = 0;
+        app.focus = FocusPane::Chat;
+        assert!(!should_show_input_cursor(&app));
+    }
+
+    #[test]
+    fn should_show_input_cursor_shows_in_active_workspace_chat_focus() {
+        let mut app = new_app();
+        app.active_workspace_id = 1;
+        app.focus = FocusPane::Chat;
+        assert!(should_show_input_cursor(&app));
+    }
+
+    #[test]
+    fn should_show_input_cursor_shows_for_slash_command_outside_chat_focus() {
+        let mut app = new_app();
+        app.active_workspace_id = 1;
+        app.focus = FocusPane::Workspaces;
+        app.input = String::from("/workspace");
+        assert!(should_show_input_cursor(&app));
+    }
+
+    #[test]
+    fn should_show_input_cursor_hides_for_sidebar_non_command() {
+        let mut app = new_app();
+        app.active_workspace_id = 1;
+        app.focus = FocusPane::Workspaces;
+        app.input = String::from("hello");
+        assert!(!should_show_input_cursor(&app));
     }
 }

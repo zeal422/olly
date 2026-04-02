@@ -17,11 +17,13 @@ mod input;
 mod markdown;
 mod modals;
 mod palette;
+mod preloader;
 mod sidebar;
 
 // Re-export palette and markdown types/functions for use by submodules.
 pub(crate) use markdown::markdown_lines;
 pub(crate) use palette::ThemePalette;
+pub(crate) use preloader::render_preloader;
 
 /// Calculate scroll position from bottom.
 fn calculate_scroll_position(chat_scroll: u16, max_scroll: u16) -> u16 {

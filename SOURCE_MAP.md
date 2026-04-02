@@ -47,6 +47,7 @@ graph TD
         tui_palette[tui/palette.rs]
         tui_md[tui/markdown.rs]
         tui_modals[tui/modals.rs]
+        tui_preloader[tui/preloader.rs]
     end
 
     subgraph "app/other"
@@ -139,6 +140,7 @@ graph TD
     tui_mod --> tui_palette
     tui_mod --> tui_md
     tui_mod --> tui_modals
+    tui_mod --> tui_preloader
     tui_mod --> domain
 
     tui_chat --> state
@@ -178,6 +180,7 @@ All dependencies flow **downward** from `app/mod.rs` coordinator. No upward impo
 |--------|--------------------------------|
 | `tui/palette.rs` | Yes — only consumed by `tui/mod.rs` |
 | `tui/modals.rs` | Yes — self-contained |
+| `tui/preloader.rs` | Yes — self-contained, no dependencies on other TUI modules |
 | `platform/*` | Yes — only consumed by `runtime/startup.rs` |
 | `autocomplete/*` | Yes — only consumed by `state.rs` |
 | `domain/*` | Yes — only consumed by `tui/mod.rs` and `state.rs` |
