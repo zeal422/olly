@@ -194,5 +194,7 @@ All dependencies flow **downward** from `app/mod.rs` coordinator. No upward impo
 | `route_command` | `crate::app::commands::dispatch` |
 | `execute_slash_command` | `crate::app::commands::execute` |
 | `WorkspaceManager` | `crate::workspace::manager` |
-| `OllamaClient` | `crate::ollama::client` |
+| `ChatMessage`, `ChatToolCall`, `chat_stream`, `chat_stream_with_tools` | `crate::ollama::chat` |
+| `list_models`, `pull_model`, `delete_model`, `ModelCache` | `crate::ollama::models` |
+| `OllamaError` | `crate::ollama::error` |
 | `AppConfig` | `crate::config` |

@@ -4,10 +4,17 @@ set -euo pipefail
 HTML=""
 OUTPUT_DIR="target/coverage"
 
-for arg in "$@"; do
-    case "$arg" in
-        --html) HTML="1" ;;
-        --output-dir) shift; OUTPUT_DIR="$1" ;;
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --html) HTML="1"; shift ;;
+        --output-dir)
+            if [ $# -lt 2 ]; then
+                echo "Error: --output-dir requires a value"
+                echo "Usage: $0 [--html] [--output-dir <path>]"
+                exit 1
+            fi
+            OUTPUT_DIR="$2"; shift 2 ;;
+        *) shift ;;
     esac
 done
 

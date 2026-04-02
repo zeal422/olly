@@ -5,11 +5,24 @@ MODEL=""
 URL=""
 RELEASE=""
 
-for arg in "$@"; do
-    case "$arg" in
-        --model) shift; MODEL="$1" ;;
-        --url) shift; URL="$1" ;;
-        --release) RELEASE="1" ;;
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --model)
+            if [ $# -lt 2 ]; then
+                echo "Error: --model requires a value"
+                echo "Usage: $0 [--model <name>] [--url <url>] [--release]"
+                exit 1
+            fi
+            MODEL="$2"; shift 2 ;;
+        --url)
+            if [ $# -lt 2 ]; then
+                echo "Error: --url requires a value"
+                echo "Usage: $0 [--model <name>] [--url <url>] [--release]"
+                exit 1
+            fi
+            URL="$2"; shift 2 ;;
+        --release) RELEASE="1"; shift ;;
+        *) shift ;;
     esac
 done
 

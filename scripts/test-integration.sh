@@ -5,9 +5,9 @@ FILTER="${1:-}"
 
 echo "=== Running Integration Tests ==="
 if [ -n "$FILTER" ]; then
-    cargo test --test '*' -- "$FILTER"
+    cargo test --tests -- "$FILTER"
 else
-    cargo test --test '*'
+    cargo test --tests
 fi
 echo ""
 echo "All integration tests passed."
