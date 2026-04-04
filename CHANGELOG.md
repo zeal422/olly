@@ -13,6 +13,9 @@ The format is based on Keep a Changelog, and this project follows Semantic Versi
 - **Version-based cache invalidation**: Cache is invalidated only when messages change, theme changes, terminal resizes, or during streaming — not on every frame.
 - **Height-aware scroll bounds**: `max_scroll` is recomputed for current viewport height on cache hits, ensuring correct scroll behavior when terminal height changes.
 
+### Added
+
+- **12 new color themes**: 8 dark themes (Dracula, Nord, Gruvbox Dark, Tokyo Night, Catppuccin Mocha, Solarized Dark, Monokai Pro, One Dark) and 4 light themes (Arctic Frost, Warm Sand, Lavender Dream, Rose Garden) — bringing the total to 20 themes (14 dark, 6 light).
 ### Fixed
 
 - **Reflow preserves line-level style**: `manual_reflow` now copies the original line's style field instead of using `Style::default()`, preserving line-level styling for wrapped lines.

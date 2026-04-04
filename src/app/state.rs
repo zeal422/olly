@@ -33,10 +33,22 @@ pub enum UiTheme {
     SakuraNight,
     PaperMint,
     DaybreakCanvas,
+    Dracula,
+    Nord,
+    GruvboxDark,
+    TokyoNight,
+    CatppuccinMocha,
+    SolarizedDark,
+    MonokaiPro,
+    OneDark,
+    ArcticFrost,
+    WarmSand,
+    LavenderDream,
+    RoseGarden,
 }
 
 impl UiTheme {
-    pub const ALL: [UiTheme; 8] = [
+    pub const ALL: [UiTheme; 20] = [
         UiTheme::EmeraldDusk,
         UiTheme::NeonCircuit,
         UiTheme::SunsetEmber,
@@ -45,6 +57,18 @@ impl UiTheme {
         UiTheme::SakuraNight,
         UiTheme::PaperMint,
         UiTheme::DaybreakCanvas,
+        UiTheme::Dracula,
+        UiTheme::Nord,
+        UiTheme::GruvboxDark,
+        UiTheme::TokyoNight,
+        UiTheme::CatppuccinMocha,
+        UiTheme::SolarizedDark,
+        UiTheme::MonokaiPro,
+        UiTheme::OneDark,
+        UiTheme::ArcticFrost,
+        UiTheme::WarmSand,
+        UiTheme::LavenderDream,
+        UiTheme::RoseGarden,
     ];
 
     pub fn label(self) -> &'static str {
@@ -57,11 +81,31 @@ impl UiTheme {
             UiTheme::SakuraNight => "Sakura Night",
             UiTheme::PaperMint => "Paper Mint",
             UiTheme::DaybreakCanvas => "Daybreak Canvas",
+            UiTheme::Dracula => "Dracula",
+            UiTheme::Nord => "Nord",
+            UiTheme::GruvboxDark => "Gruvbox Dark",
+            UiTheme::TokyoNight => "Tokyo Night",
+            UiTheme::CatppuccinMocha => "Catppuccin Mocha",
+            UiTheme::SolarizedDark => "Solarized Dark",
+            UiTheme::MonokaiPro => "Monokai Pro",
+            UiTheme::OneDark => "One Dark",
+            UiTheme::ArcticFrost => "Arctic Frost",
+            UiTheme::WarmSand => "Warm Sand",
+            UiTheme::LavenderDream => "Lavender Dream",
+            UiTheme::RoseGarden => "Rose Garden",
         }
     }
 
     pub fn is_light(self) -> bool {
-        matches!(self, UiTheme::PaperMint | UiTheme::DaybreakCanvas)
+        matches!(
+            self,
+            UiTheme::PaperMint
+                | UiTheme::DaybreakCanvas
+                | UiTheme::ArcticFrost
+                | UiTheme::WarmSand
+                | UiTheme::LavenderDream
+                | UiTheme::RoseGarden
+        )
     }
 }
 
