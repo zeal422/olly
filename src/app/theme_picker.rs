@@ -21,6 +21,7 @@ impl App {
         if let Some(state) = &mut self.theme_picker {
             state.selected = (state.selected + 1) % UiTheme::ALL.len();
             self.theme = UiTheme::ALL[state.selected];
+            self.chat_content_version += 1;
         }
     }
 
@@ -32,6 +33,7 @@ impl App {
                 state.selected -= 1;
             }
             self.theme = UiTheme::ALL[state.selected];
+            self.chat_content_version += 1;
         }
     }
 
@@ -47,6 +49,7 @@ impl App {
     pub(crate) fn theme_picker_cancel(&mut self) {
         if let Some(state) = self.theme_picker.take() {
             self.theme = state.original;
+            self.chat_content_version += 1;
             self.set_toast(ToastLevel::Info, "Theme picker canceled");
         }
     }

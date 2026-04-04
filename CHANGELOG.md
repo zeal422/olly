@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project follows Semantic Versioning.
 
+## [0.0.19] - 2026-04-04
+
+### Performance
+
+- **Viewport-only chat rendering**: Only the visible ~20 lines are processed and cloned per tick instead of all 1000+ lines. Scrolling through sessions with many messages is now smooth and responsive.
+- **Chat visual lines caching**: Parsed markdown and word-wrapped visual lines are cached and reused when messages haven't changed, eliminating redundant markdown parsing and reflow on every 80ms tick.
+- **Version-based cache invalidation**: Cache is invalidated only when messages change, theme changes, terminal resizes, or during streaming — not on every frame.
+- **Height-aware scroll bounds**: `max_scroll` is recomputed for current viewport height on cache hits, ensuring correct scroll behavior when terminal height changes.
+
+### Fixed
+
+- **Reflow preserves line-level style**: `manual_reflow` now copies the original line's style field instead of using `Style::default()`, preserving line-level styling for wrapped lines.
+- Removed unused `update_chat_area_metadata` method to eliminate dead-code warnings.
+
 ## [0.0.18] - 2026-04-02
 
 ### Added

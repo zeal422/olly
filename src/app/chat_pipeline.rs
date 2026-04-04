@@ -293,6 +293,7 @@ pub(crate) async fn send_prompt(
                         streamed_any = true;
                         let message = &mut app.messages[assistant_index];
                         message.content.push_str(&chunk.content);
+                        app.chat_content_version += 1;
                     }
                     if !chunk.tool_calls.is_empty() {
                         current_tool_calls.extend(chunk.tool_calls.clone());
@@ -319,6 +320,7 @@ pub(crate) async fn send_prompt(
                         streamed_any = true;
                         let message = &mut app.messages[assistant_index];
                         message.content.push_str(&chunk.content);
+                        app.chat_content_version += 1;
                     }
                     if let Some(value) = chunk.prompt_eval_count {
                         prompt_eval_count = Some(value);

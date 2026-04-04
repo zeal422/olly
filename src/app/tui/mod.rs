@@ -1,6 +1,6 @@
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
-    style::{Modifier, Style},
+    style::Style,
     text::{Line, Span},
     widgets::{Block, Borders, Clear, Paragraph},
     Frame,
@@ -113,7 +113,7 @@ pub fn draw(frame: &mut Frame<'_>, app: &mut App) {
     modals::render_tool_confirmation_modal(frame, app, palette);
 }
 
-fn line_width(line: &Line<'_>) -> usize {
+pub(super) fn line_width(line: &Line<'_>) -> usize {
     line.spans
         .iter()
         .map(|span| span.content.chars().count())
@@ -207,7 +207,7 @@ fn manual_reflow<'a>(logical_lines: &[Line<'a>], width: usize) -> Vec<Line<'a>> 
             result.push(Line {
                 spans: current_line_spans,
                 alignment,
-                style: Style::default(),
+                style: line.style,
             });
             remaining = next_remaining;
         }
@@ -216,89 +216,7 @@ fn manual_reflow<'a>(logical_lines: &[Line<'a>], width: usize) -> Vec<Line<'a>> 
     result
 }
 
-fn apply_selection_to_text(
-    visual_lines: &[Line<'_>],
-    anchor: (usize, usize),
-    current: (usize, usize),
-) -> Vec<Line<'static>> {
-    let (mut start_line, mut start_col) = anchor;
-    let (mut end_line, mut end_col) = current;
-
-    if start_line > end_line || (start_line == end_line && start_col > end_col) {
-        std::mem::swap(&mut start_line, &mut end_line);
-        std::mem::swap(&mut start_col, &mut end_col);
-    }
-
-    let selection_style = Style::default().add_modifier(Modifier::REVERSED);
-    let mut result = Vec::new();
-
-    for (i, line) in visual_lines.iter().enumerate() {
-        if i < start_line || i > end_line {
-            result.push(Line {
-                spans: line
-                    .spans
-                    .iter()
-                    .map(|s| Span {
-                        content: std::borrow::Cow::Owned(s.content.to_string()),
-                        style: s.style,
-                    })
-                    .collect(),
-                alignment: line.alignment,
-                style: Style::default(),
-            });
-            continue;
-        }
-
-        let line_len = line_width(line);
-        let sel_start = start_col.min(line_len);
-        let sel_end_excl = if i == end_line {
-            end_col.saturating_add(1).min(line_len)
-        } else {
-            line_len
-        };
-
-        if i == start_line && i == end_line {
-            let new_spans = split_line_at_selection(line, sel_start, sel_end_excl, selection_style);
-            result.push(Line {
-                spans: new_spans,
-                alignment: line.alignment,
-                style: Style::default(),
-            });
-        } else if i == start_line {
-            let new_spans = split_line_at_selection(line, sel_start, line_len, selection_style);
-            result.push(Line {
-                spans: new_spans,
-                alignment: line.alignment,
-                style: Style::default(),
-            });
-        } else if i == end_line {
-            let new_spans = split_line_at_selection(line, 0, sel_end_excl, selection_style);
-            result.push(Line {
-                spans: new_spans,
-                alignment: line.alignment,
-                style: Style::default(),
-            });
-        } else {
-            let new_spans: Vec<Span<'static>> = line
-                .spans
-                .iter()
-                .map(|s| Span {
-                    content: std::borrow::Cow::Owned(s.content.to_string()),
-                    style: s.style.patch(selection_style),
-                })
-                .collect();
-            result.push(Line {
-                spans: new_spans,
-                alignment: line.alignment,
-                style: Style::default(),
-            });
-        }
-    }
-
-    result
-}
-
-fn split_line_at_selection(
+pub(super) fn split_line_at_selection(
     line: &Line<'_>,
     sel_start: usize,
     sel_end: usize,
@@ -492,8 +410,8 @@ fn sidebar_action_hint(app: &App) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        apply_selection_to_text, calculate_scroll_position, manual_reflow, scroll_window,
-        sidebar_action_hint, sidebar_line_with_marquee, truncate_end, truncate_middle, Style,
+        calculate_scroll_position, manual_reflow, scroll_window, sidebar_action_hint,
+        sidebar_line_with_marquee, split_line_at_selection, truncate_end, truncate_middle, Style,
     };
     use crate::app::tui::input::{
         estimate_input_visual_lines, input_cursor_screen_position, input_cursor_visual_position,
@@ -738,30 +656,23 @@ mod tests {
     }
 
     #[test]
-    fn apply_selection_to_text_highlights_single_line() {
+    fn split_line_at_selection_highlights_partial_line() {
         use ratatui::style::Modifier;
         let line = ratatui::text::Line::from(vec![ratatui::text::Span::raw("Hello world")]);
-        let visual_lines = vec![line];
-        let anchor = (0, 6);
-        let current = (0, 10);
-        let result = apply_selection_to_text(&visual_lines, anchor, current);
+        let selection_style = Style::default().add_modifier(Modifier::REVERSED);
+        let result = split_line_at_selection(&line, 6, 10, selection_style);
         // The selected part "wor" should have reversed style
-        // Check that the line contains spans with reversed style
-        let reversed_style = Style::default().add_modifier(Modifier::REVERSED);
-        let has_reversed = result[0].spans.iter().any(|s| s.style == reversed_style);
+        let has_reversed = result.iter().any(|s| s.style == selection_style);
         assert!(has_reversed);
     }
 
     #[test]
-    fn apply_selection_to_text_whole_line() {
+    fn split_line_at_selection_full_line() {
         let line = ratatui::text::Line::from(vec![ratatui::text::Span::raw("Hello")]);
-        let visual_lines = vec![line];
-        let anchor = (0, 0);
-        let current = (0, 4);
-        let result = apply_selection_to_text(&visual_lines, anchor, current);
+        let selection_style = Style::default().add_modifier(Modifier::REVERSED);
+        let result = split_line_at_selection(&line, 0, 5, selection_style);
         // Entire line should be reversed
-        let reversed_style = Style::default().add_modifier(Modifier::REVERSED);
-        let all_reversed = result[0].spans.iter().all(|s| s.style == reversed_style);
+        let all_reversed = result.iter().all(|s| s.style == selection_style);
         assert!(all_reversed);
     }
 }

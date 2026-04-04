@@ -32,6 +32,7 @@ pub(crate) async fn run(
                     terminal.clear()?;
                     crate::app::platform::hide_console_scrollbars();
                     app.clear_chat_selection();
+                    app.chat_visual_lines_styled.clear();
                 }
                 Event::Key(key) => {
                     let action = crate::app::input::resolve_key_event_with_bindings(

@@ -1,5 +1,3 @@
-use ratatui::layout::Alignment;
-
 use super::App;
 
 impl App {
@@ -35,6 +33,7 @@ impl App {
             .saturating_sub(amount);
     }
 
+    #[allow(dead_code)]
     pub(crate) fn update_chat_max_scroll_hint(&self, max_scroll: u16) {
         self.chat_max_scroll_hint.set(max_scroll);
     }
@@ -48,16 +47,5 @@ impl App {
         self.chat_selection_current = None;
         self.is_selecting = false;
         self.auto_scroll_direction = None;
-    }
-
-    pub(crate) fn update_chat_area_metadata(
-        &mut self,
-        area: ratatui::layout::Rect,
-        visual_lines: Vec<(String, Option<Alignment>)>,
-        max_scroll: u16,
-    ) {
-        self.chat_area = Some(area);
-        self.chat_visual_lines = visual_lines;
-        self.update_chat_max_scroll_hint(max_scroll);
     }
 }

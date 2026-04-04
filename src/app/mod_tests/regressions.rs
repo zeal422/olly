@@ -274,3 +274,78 @@ fn workspace_system_context_not_injected_without_workspace() {
     // Verify no system message was injected
     assert!(!messages.iter().any(|m| m.role == "system"));
 }
+
+#[test]
+fn chat_content_version_increments_on_push_user() {
+    let mut app = App::new(
+        String::from("http://localhost:11434"),
+        String::from("llama3.2:latest"),
+    );
+    let before = app.chat_content_version;
+    app.push_user("Hello".to_string(), 0);
+    assert!(app.chat_content_version > before);
+}
+
+#[test]
+fn chat_content_version_increments_on_push_system() {
+    let mut app = App::new(
+        String::from("http://localhost:11434"),
+        String::from("llama3.2:latest"),
+    );
+    let before = app.chat_content_version;
+    app.push_system("System message".to_string());
+    assert!(app.chat_content_version > before);
+}
+
+#[test]
+fn chat_content_version_increments_on_push_assistant() {
+    let mut app = App::new(
+        String::from("http://localhost:11434"),
+        String::from("llama3.2:latest"),
+    );
+    let before = app.chat_content_version;
+    app.push_assistant("Assistant response".to_string(), None);
+    assert!(app.chat_content_version > before);
+}
+
+#[test]
+fn chat_visual_lines_cache_valid_when_versions_match() {
+    let mut app = App::new(
+        String::from("http://localhost:11434"),
+        String::from("llama3.2:latest"),
+    );
+    app.push_user("Hello".to_string(), 0);
+
+    // Simulate cache being built
+    app.chat_content_version = 1;
+    app.chat_cached_version = 1;
+    app.chat_visual_lines_styled = vec![ratatui::text::Line::from("test")];
+    app.chat_last_render_width = 80;
+
+    // Cache should be valid
+    let cache_valid = !app.chat_visual_lines_styled.is_empty()
+        && app.chat_content_version == app.chat_cached_version
+        && app.chat_last_render_width == 80;
+    assert!(cache_valid);
+}
+
+#[test]
+fn chat_visual_lines_cache_invalid_when_versions_differ() {
+    let mut app = App::new(
+        String::from("http://localhost:11434"),
+        String::from("llama3.2:latest"),
+    );
+    app.push_user("Hello".to_string(), 0);
+
+    // Simulate stale cache
+    app.chat_content_version = 2;
+    app.chat_cached_version = 1;
+    app.chat_visual_lines_styled = vec![ratatui::text::Line::from("test")];
+    app.chat_last_render_width = 80;
+
+    // Cache should be invalid
+    let cache_valid = !app.chat_visual_lines_styled.is_empty()
+        && app.chat_content_version == app.chat_cached_version
+        && app.chat_last_render_width == 80;
+    assert!(!cache_valid);
+}

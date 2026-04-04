@@ -29,6 +29,7 @@ impl App {
             tool_calls: None,
         });
         self.chat_scroll = 0;
+        self.chat_content_version += 1;
     }
 
     pub(crate) fn push_user(&mut self, content: String, image_count: usize) {

@@ -11,6 +11,7 @@ use ratatui::{
 use crate::app::{state::FocusPane, App};
 
 use super::palette::chat_background;
+use super::{line_width, split_line_at_selection};
 
 /// Render the main chat panel with messages and footer context strip.
 pub(super) fn render_chat_panel(
@@ -93,6 +94,7 @@ pub(super) fn render_chat_panel(
         // Clear stale chat metadata when not in chat view
         app.chat_area = None;
         app.chat_visual_lines.clear();
+        app.chat_visual_lines_styled.clear();
         app.clear_chat_selection();
         app.chat_scroll = 0;
         app.chat_max_scroll_hint.set(0);
@@ -119,6 +121,7 @@ pub(super) fn render_chat_panel(
         // Clear stale chat metadata when not in chat view
         app.chat_area = None;
         app.chat_visual_lines.clear();
+        app.chat_visual_lines_styled.clear();
         app.clear_chat_selection();
         app.chat_scroll = 0;
         app.chat_max_scroll_hint.set(0);
@@ -132,33 +135,187 @@ pub(super) fn render_chat_panel(
 
     let viewport_height = split[0].height;
     let chat_width = split[0].width as usize;
-    let logical_lines = build_chat_logical_lines(app, palette);
-    let visual_lines = super::manual_reflow(&logical_lines, chat_width);
-    let plain_lines: Vec<(String, Option<Alignment>)> = visual_lines
-        .iter()
-        .map(|line| (line_to_string(line), line.alignment))
-        .collect();
-    let max_scroll = visual_lines.len().saturating_sub(viewport_height as usize) as u16;
-    app.update_chat_area_metadata(split[0], plain_lines, max_scroll);
+
+    // Check if cache is valid (version matches, not empty, same dimensions)
+    let cache_valid = !app.chat_visual_lines_styled.is_empty()
+        && app.chat_content_version == app.chat_cached_version
+        && app.chat_last_render_width == split[0].width
+        && app.chat_last_render_height == split[0].height;
+
+    let max_scroll = if cache_valid {
+        // Recompute max_scroll for current viewport height
+        let max_scroll = app
+            .chat_visual_lines_styled
+            .len()
+            .saturating_sub(viewport_height as usize) as u16;
+        app.chat_max_scroll_hint.set(max_scroll);
+        max_scroll
+    } else {
+        // Rebuild from scratch
+        let logical_lines = build_chat_logical_lines(app, palette);
+        let visual_lines = super::manual_reflow(&logical_lines, chat_width);
+        let styled_lines: Vec<Line<'static>> = visual_lines
+            .into_iter()
+            .map(|line| {
+                let mut l = Line::from(
+                    line.spans
+                        .into_iter()
+                        .map(|s| Span::styled(s.content.into_owned(), s.style))
+                        .collect::<Vec<_>>(),
+                );
+                if let Some(align) = line.alignment {
+                    l = l.alignment(align);
+                }
+                l
+            })
+            .collect();
+        let plain_lines: Vec<(String, Option<Alignment>)> = styled_lines
+            .iter()
+            .map(|line| (line_to_string(line), line.alignment))
+            .collect();
+        let max_scroll = styled_lines.len().saturating_sub(viewport_height as usize) as u16;
+
+        // Update cache
+        app.chat_visual_lines_styled = styled_lines;
+        app.chat_cached_version = app.chat_content_version;
+        app.chat_last_render_width = split[0].width;
+        app.chat_last_render_height = split[0].height;
+        app.chat_area = Some(split[0]);
+        app.chat_visual_lines = plain_lines;
+        app.chat_max_scroll_hint.set(max_scroll);
+
+        max_scroll
+    };
 
     let scroll_y = super::calculate_scroll_position(app.chat_scroll, max_scroll);
 
-    let display_lines = if let (Some(anchor), Some(current)) =
-        (app.chat_selection_anchor, app.chat_selection_current)
-    {
-        super::apply_selection_to_text(&visual_lines, anchor, current)
+    // Only process visible viewport lines (O(viewport) instead of O(n))
+    let total_lines = app.chat_visual_lines_styled.len();
+    let visible_start = scroll_y as usize;
+    let visible_end = (scroll_y as usize + viewport_height as usize).min(total_lines);
+
+    let display_lines: Vec<Line<'static>> = if visible_start < total_lines {
+        let visible_lines = &app.chat_visual_lines_styled[visible_start..visible_end];
+
+        if let (Some(anchor), Some(current)) =
+            (app.chat_selection_anchor, app.chat_selection_current)
+        {
+            // Apply selection only to visible lines
+            let (mut start_line, mut start_col) = anchor;
+            let (mut end_line, mut end_col) = current;
+            if start_line > end_line || (start_line == end_line && start_col > end_col) {
+                std::mem::swap(&mut start_line, &mut end_line);
+                std::mem::swap(&mut start_col, &mut end_col);
+            }
+
+            let selection_style = Style::default().add_modifier(Modifier::REVERSED);
+            visible_lines
+                .iter()
+                .enumerate()
+                .map(|(i, line)| {
+                    let global_idx = visible_start + i;
+                    if global_idx < start_line || global_idx > end_line {
+                        // Not selected — clone as-is
+                        Line {
+                            spans: line
+                                .spans
+                                .iter()
+                                .map(|s| Span {
+                                    content: std::borrow::Cow::Owned(s.content.to_string()),
+                                    style: s.style,
+                                })
+                                .collect(),
+                            alignment: line.alignment,
+                            style: Style::default(),
+                        }
+                    } else {
+                        // Within selection range
+                        let line_len = line_width(line);
+                        let sel_start = if global_idx == start_line {
+                            start_col
+                        } else {
+                            0
+                        };
+                        let sel_end_excl = if global_idx == end_line {
+                            end_col.saturating_add(1).min(line_len)
+                        } else {
+                            line_len
+                        };
+
+                        if global_idx == start_line && global_idx == end_line {
+                            let new_spans = split_line_at_selection(
+                                line,
+                                sel_start,
+                                sel_end_excl,
+                                selection_style,
+                            );
+                            Line {
+                                spans: new_spans,
+                                alignment: line.alignment,
+                                style: Style::default(),
+                            }
+                        } else if global_idx == start_line {
+                            let new_spans =
+                                split_line_at_selection(line, sel_start, line_len, selection_style);
+                            Line {
+                                spans: new_spans,
+                                alignment: line.alignment,
+                                style: Style::default(),
+                            }
+                        } else if global_idx == end_line {
+                            let new_spans =
+                                split_line_at_selection(line, 0, sel_end_excl, selection_style);
+                            Line {
+                                spans: new_spans,
+                                alignment: line.alignment,
+                                style: Style::default(),
+                            }
+                        } else {
+                            // Fully selected line in the middle
+                            Line {
+                                spans: line
+                                    .spans
+                                    .iter()
+                                    .map(|s| Span {
+                                        content: std::borrow::Cow::Owned(s.content.to_string()),
+                                        style: s.style.patch(selection_style),
+                                    })
+                                    .collect(),
+                                alignment: line.alignment,
+                                style: Style::default(),
+                            }
+                        }
+                    }
+                })
+                .collect()
+        } else {
+            // No selection — just clone visible lines
+            visible_lines
+                .iter()
+                .map(|line| Line {
+                    spans: line
+                        .spans
+                        .iter()
+                        .map(|s| Span {
+                            content: std::borrow::Cow::Owned(s.content.to_string()),
+                            style: s.style,
+                        })
+                        .collect(),
+                    alignment: line.alignment,
+                    style: Style::default(),
+                })
+                .collect()
+        }
     } else {
-        visual_lines
+        Vec::new()
     };
 
     frame.render_widget(
-        Paragraph::new(Text::from(display_lines))
-            .style(
-                Style::default()
-                    .fg(palette.chat_text)
-                    .bg(chat_background(app.theme)),
-            )
-            .scroll((scroll_y, 0)),
+        Paragraph::new(Text::from(display_lines)).style(
+            Style::default()
+                .fg(palette.chat_text)
+                .bg(chat_background(app.theme)),
+        ),
         split[0],
     );
 
