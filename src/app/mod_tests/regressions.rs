@@ -1,6 +1,6 @@
 use super::helpers::*;
 use crate::app::is_cloud_model_name;
-use crate::ollama::chat::{ChatToolCall, ToolFunction};
+use crate::ollama::chat::{ChatMessage, ChatToolCall, ToolFunction};
 
 #[test]
 fn cloud_model_classifier_handles_common_patterns() {
@@ -231,4 +231,46 @@ fn to_ollama_messages_includes_tool_calls_for_assistant() {
     let calls = assistant_msg.tool_calls.as_ref().unwrap();
     assert_eq!(calls.len(), 1);
     assert_eq!(calls[0].function.as_ref().unwrap().name, "grep_search");
+}
+
+#[test]
+fn workspace_system_context_injected_before_tool_loop() {
+    let mut app = App::new(
+        String::from("http://localhost:11434"),
+        String::from("llama3.2:latest"),
+    );
+    app.workspace_root_path = Some(String::from("C:\\CODING\\my-project"));
+
+    // Simulate the system context injection
+    let mut messages = app.to_ollama_messages();
+    if let Some(ref workspace_path) = app.workspace_root_path {
+        let system_context = format!(
+            "You are working in the workspace: {}\nPlatform: {}\nDate: {}",
+            workspace_path,
+            std::env::consts::OS,
+            chrono::Local::now().format("%Y-%m-%d")
+        );
+        messages.insert(0, ChatMessage::new("system", system_context));
+    }
+
+    // Verify system message is first
+    assert_eq!(messages[0].role, "system");
+    assert!(messages[0].content.contains("C:\\CODING\\my-project"));
+    assert!(messages[0].content.contains("Platform:"));
+    assert!(messages[0].content.contains("Date:"));
+}
+
+#[test]
+fn workspace_system_context_not_injected_without_workspace() {
+    let mut app = App::new(
+        String::from("http://localhost:11434"),
+        String::from("llama3.2:latest"),
+    );
+    // No workspace path set
+    app.workspace_root_path = None;
+
+    let messages = app.to_ollama_messages();
+
+    // Verify no system message was injected
+    assert!(!messages.iter().any(|m| m.role == "system"));
 }

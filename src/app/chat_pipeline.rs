@@ -1,5 +1,6 @@
 use std::time::{Duration, Instant};
 
+use chrono::Local;
 use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
 
 use crate::{
@@ -193,6 +194,18 @@ pub(crate) async fn send_prompt(
     let _ = terminal.draw(|f| crate::app::tui::draw(f, app));
 
     let mut request_messages: Vec<ChatMessage> = app.to_ollama_messages();
+
+    // Prepend system context with workspace information
+    if let Some(ref workspace_path) = app.workspace_root_path {
+        let system_context = format!(
+            "You are working in the workspace: {}\nPlatform: {}\nDate: {}",
+            workspace_path,
+            std::env::consts::OS,
+            Local::now().format("%Y-%m-%d")
+        );
+        request_messages.insert(0, ChatMessage::new("system", system_context));
+    }
+
     if !images_base64.is_empty() {
         if let Some(last_user) = request_messages.iter_mut().rev().find(|m| m.role == "user") {
             last_user.images = Some(images_base64.clone());

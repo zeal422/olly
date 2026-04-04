@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project follows Semantic Versioning.
 
+## [0.0.18] - 2026-04-02
+
+### Added
+
+- **Workspace context in system prompt**: The model now always knows the active workspace path, platform, and current date via a system message prepended to every request. This ensures the model can accurately answer "What folder are you in?" and correctly place files when using tools.
+
 ## [0.0.17] - 2026-04-02
 
 ### Fixed
