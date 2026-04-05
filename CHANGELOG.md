@@ -4,6 +4,22 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project follows Semantic Versioning.
 
+## [0.0.20] - 2026-04-05
+
+### Added
+- **Code block copy on click**: Clicking anywhere on a code block in the chat copies the raw code to the clipboard. A subtle `[copy]` indicator appears on the first line of each code block.
+- **Copy confirmation toast**: Displays a success toast like "Copied rust code block (12 lines)" after a successful copy, or an error toast on failure.
+- **`/diff` command**: View the output of the last executed tool as a formatted code block in the chat. Type `/diff` to see the result, or get a helpful message if no tool has run yet.
+- **Command autocomplete for `/diff`**: `/diff` is now included in the slash command suggestions.
+
+### Enhanced
+- **Smart click routing**: Mouse clicks on code blocks now trigger copy instead of starting text selection, while clicks outside code blocks preserve normal selection behavior.
+- **Tool output capture**: The last successful tool output is now stored in app state for quick reference via `/diff`.
+
+### Technical
+- Added logical-to-visual line mapping for code blocks to ensure accurate hit-testing regardless of terminal width or text wrapping.
+- Integrated clipboard operations with robust error handling and toast feedback.
+
 ## [0.0.19] - 2026-04-04
 
 ### Performance
