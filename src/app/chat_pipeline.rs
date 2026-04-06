@@ -484,6 +484,15 @@ pub(crate) async fn send_prompt(
                 ToolResult::error("invalid_tool", "Tool call missing function")
             };
 
+            // Store tool result for /diff view (clear on failure/empty to prevent stale output)
+            if result.status == crate::app::tools::ToolResultStatus::Success
+                && !result.output.is_empty()
+            {
+                app.last_tool_output = Some(result.output.clone());
+            } else {
+                app.last_tool_output = None;
+            }
+
             let model_tool_content = model_tool_message_content(&result);
             cumulative_output_size += model_tool_content.len();
 

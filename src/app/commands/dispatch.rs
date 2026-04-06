@@ -13,6 +13,7 @@ pub enum CommandRoute {
     Model,
     Url,
     Tools,
+    Diff,
     Unknown,
 }
 
@@ -31,6 +32,7 @@ pub fn route_command(root: &str) -> CommandRoute {
         "/model" => CommandRoute::Model,
         "/url" => CommandRoute::Url,
         "/tools" => CommandRoute::Tools,
+        "/diff" => CommandRoute::Diff,
         _ => CommandRoute::Unknown,
     }
 }

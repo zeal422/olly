@@ -100,8 +100,93 @@ pub(crate) fn handle(
                 }
             }
         }
+        CommandRoute::Diff => {
+            if let Some(ref output) = app.last_tool_output {
+                app.push_system(format!("````\n{output}\n````"));
+            } else {
+                app.push_system(
+                    "No tool output available. Run a tool first, then use /diff to view its output.".to_string()
+                );
+            }
+        }
         _ => return Ok(false),
     }
 
     Ok(true)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn setup_test_env() -> (App, WorkspaceManager, WorkspaceSession) {
+        let stamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let root =
+            std::env::temp_dir().join(format!("olly-diff-tests-{}-{stamp}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        let db_path = root.join("workspaces.db");
+        let manager = WorkspaceManager::open(&db_path).unwrap();
+        let session = manager
+            .bootstrap_default("Test WS", "llama3.2:latest")
+            .unwrap();
+        let app = App::new("http://localhost:11434".into(), "llama3.2:latest".into());
+        (app, manager, session)
+    }
+
+    #[test]
+    fn diff_shows_last_tool_output() {
+        let (mut app, manager, mut session) = setup_test_env();
+        app.last_tool_output = Some("tool result".into());
+        let _ = handle(
+            &mut app,
+            &manager,
+            &mut session,
+            CommandRoute::Diff,
+            &["/diff"],
+        );
+        assert!(app.messages.last().unwrap().content.contains("tool result"));
+    }
+
+    #[test]
+    fn diff_shows_message_when_no_output() {
+        let (mut app, manager, mut session) = setup_test_env();
+        app.last_tool_output = None;
+        let _ = handle(
+            &mut app,
+            &manager,
+            &mut session,
+            CommandRoute::Diff,
+            &["/diff"],
+        );
+        assert!(app
+            .messages
+            .last()
+            .unwrap()
+            .content
+            .contains("No tool output available"));
+    }
+
+    #[test]
+    fn diff_shows_fallback_when_output_cleared() {
+        let (mut app, manager, mut session) = setup_test_env();
+        // Simulate state cleared after a failed/empty tool call (P1 fix)
+        app.last_tool_output = None;
+        let _ = handle(
+            &mut app,
+            &manager,
+            &mut session,
+            CommandRoute::Diff,
+            &["/diff"],
+        );
+        assert!(app
+            .messages
+            .last()
+            .unwrap()
+            .content
+            .contains("No tool output available"));
+    }
 }

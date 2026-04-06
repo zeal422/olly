@@ -13,13 +13,14 @@ Olly is a Rust terminal UI client for Ollama. It focuses on a fast chat loop for
 - Full-text search over stored messages.
 - File-context ingestion with safety guardrails.
 - Markdown rendering with optional syntax highlighting.
-- Slash-command power features (`/search`, `/export`, `/checkpoint`, `/workspace`, `/session`, `/attach`, `/model`, `/url`, `/tools`).
+- Slash-command power features (`/search`, `/export`, `/checkpoint`, `/workspace`, `/session`, `/attach`, `/model`, `/url`, `/tools`, `/diff`).
 - Configurable keybindings and runtime Ollama URL.
-- 8 built-in UI themes with live preview.
+- 20 built-in UI themes with live preview.
 - Improved Windows console stability: startup sizing is normalized and resize handling avoids native scrollbar/layout glitches.
 - Mouse-wheel chat scrolling with bounded overscroll behavior and consistent speed.
 - **Right-click paste support** with cross-platform clipboard integration.
 - **Mouse drag text selection and Ctrl+C copy** for chat messages with visual highlighting.
+- **Code block copy on click**: Clicking a code block copies its content to the clipboard.
 - **Drag-to-scroll selection** — auto-scroll activates when dragging near chat edges.
 - **Shift+click range selection** — click to set anchor, Shift+click to select range.
 - Per-session footer telemetry including context usage (`ctx:used/max`) against model context window.
@@ -227,6 +228,7 @@ autocomplete = "Tab"
 - `/tools allow <tool>` add tool to allowlist
 - `/tools deny <tool>` add tool to denylist
 - `/tools reset` clear allowlist and denylist
+- `/diff` view the output of the last executed tool as a formatted code block
 
 ### Tool Safety
 

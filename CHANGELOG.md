@@ -19,6 +19,7 @@ The format is based on Keep a Changelog, and this project follows Semantic Versi
 ### Technical
 - Added logical-to-visual line mapping for code blocks to ensure accurate hit-testing regardless of terminal width or text wrapping.
 - Integrated clipboard operations with robust error handling and toast feedback.
+- Fixed test compilation and visibility issues: corrected palette import paths, added missing TUI test imports, relocated diff parsing test to public module, and derived `PartialEq` for `CodeBlockRange`.
 
 ## [0.0.19] - 2026-04-04
 

@@ -34,3 +34,5 @@ Desktop.ini
 *.tmp
 *.temp
 *.bak
+*.orig
+.aider*

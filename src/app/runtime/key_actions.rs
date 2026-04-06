@@ -322,11 +322,50 @@ fn handle_copy(app: &mut App) {
 }
 
 fn handle_start_selection(app: &mut App, mouse: MouseEvent) {
+    // First, check if click is on a code block
+    if let Some(pos) = mouse_to_chat_visual_position(app, mouse) {
+        if let Some(block) = find_code_block_at_line(&app.code_blocks, pos.0) {
+            // Copy code block to clipboard
+            match ClipboardContext::new() {
+                Ok(mut ctx) => {
+                    let lang_label = if block.language.is_empty() {
+                        "code".to_string()
+                    } else {
+                        block.language.clone()
+                    };
+                    let line_count = block.raw_content.lines().count();
+                    if let Err(e) = ctx.set_contents(block.raw_content.clone()) {
+                        app.set_toast(ToastLevel::Error, format!("Failed to copy: {e}"));
+                    } else {
+                        app.set_toast(
+                            ToastLevel::Success,
+                            format!("Copied {lang_label} code block ({line_count} lines)"),
+                        );
+                    }
+                }
+                Err(_) => {
+                    app.set_toast(ToastLevel::Error, "Failed to copy to clipboard");
+                }
+            }
+            return; // Don't start selection
+        }
+    }
+
+    // Normal text selection behavior
     if let Some(pos) = mouse_to_chat_visual_position(app, mouse) {
         app.chat_selection_anchor = Some(pos);
         app.chat_selection_current = Some(pos);
         app.is_selecting = true;
     }
+}
+
+fn find_code_block_at_line(
+    blocks: &[crate::app::state::CodeBlockRange],
+    visual_line: usize,
+) -> Option<&crate::app::state::CodeBlockRange> {
+    blocks
+        .iter()
+        .find(|b| visual_line >= b.start_visual_line && visual_line <= b.end_visual_line)
 }
 
 fn handle_update_selection(app: &mut App, mouse: MouseEvent) {
@@ -436,9 +475,10 @@ fn extract_selection_text(
 #[cfg(test)]
 mod tests {
     use super::{
-        apply_mouse_wheel_scroll, extract_selection_text, mouse_to_chat_visual_position,
-        resolve_scroll_route, ScrollRoute,
+        apply_mouse_wheel_scroll, extract_selection_text, find_code_block_at_line,
+        handle_start_selection, mouse_to_chat_visual_position, resolve_scroll_route, ScrollRoute,
     };
+    use crate::app::state::CodeBlockRange;
     use crate::app::{App, FocusPane};
     use ratatui::layout::Alignment;
 
@@ -810,5 +850,93 @@ mod tests {
         let current = (2, 2);
         let text = extract_selection_text(&lines, anchor, current);
         assert_eq!(text, "line\nSecond line\nThi");
+    }
+
+    #[test]
+    fn find_code_block_at_line_returns_block_when_inside_range() {
+        let blocks = vec![CodeBlockRange {
+            start_visual_line: 5,
+            end_visual_line: 10,
+            raw_content: "code".into(),
+            language: "rust".into(),
+        }];
+        assert!(find_code_block_at_line(&blocks, 7).is_some());
+        assert!(find_code_block_at_line(&blocks, 4).is_none());
+        assert!(find_code_block_at_line(&blocks, 11).is_none());
+    }
+
+    #[test]
+    fn find_code_block_at_line_returns_first_match() {
+        let blocks = vec![
+            CodeBlockRange {
+                start_visual_line: 0,
+                end_visual_line: 2,
+                raw_content: "a".into(),
+                language: "py".into(),
+            },
+            CodeBlockRange {
+                start_visual_line: 5,
+                end_visual_line: 7,
+                raw_content: "b".into(),
+                language: "rs".into(),
+            },
+        ];
+        let found = find_code_block_at_line(&blocks, 1).unwrap();
+        assert_eq!(found.language, "py");
+    }
+
+    #[test]
+    fn handle_start_selection_triggers_toast_on_code_block_click() {
+        let mut app = App::new(
+            String::from("http://localhost:11434"),
+            String::from("llama3.2:latest"),
+        );
+        app.chat_area = Some(ratatui::layout::Rect::new(0, 0, 80, 20));
+        app.chat_visual_lines = vec![(String::from("some code"), Some(Alignment::Left)); 10];
+        app.code_blocks = vec![CodeBlockRange {
+            start_visual_line: 2,
+            end_visual_line: 5,
+            raw_content: "fn main() {}".into(),
+            language: "rust".into(),
+        }];
+
+        let mouse = crossterm::event::MouseEvent {
+            kind: crossterm::event::MouseEventKind::Down(crossterm::event::MouseButton::Left),
+            column: 5, // Fixed: within "some code" text (9 chars wide, area.x = 0)
+            row: 3,    // Inside block range
+            modifiers: crossterm::event::KeyModifiers::NONE,
+        };
+
+        handle_start_selection(&mut app, mouse);
+
+        // Toast should be set (either success or error depending on clipboard availability)
+        assert!(app.toast.is_some());
+        let toast_msg = app.toast.as_ref().unwrap().message.to_lowercase();
+        assert!(
+            toast_msg.contains("copied") || toast_msg.contains("failed to copy"),
+            "Expected copy toast, got: {}",
+            app.toast.as_ref().unwrap().message
+        );
+    }
+
+    #[test]
+    fn find_code_block_at_line_returns_same_block_for_wrapped_lines() {
+        let blocks = vec![crate::app::state::CodeBlockRange {
+            start_visual_line: 3,
+            end_visual_line: 5,
+            raw_content: "fn main() {\n    let x = a_long_line_that_wraps;\n}".into(),
+            language: "rust".into(),
+        }];
+
+        let b3 = find_code_block_at_line(&blocks, 3).unwrap();
+        let b4 = find_code_block_at_line(&blocks, 4).unwrap();
+        let b5 = find_code_block_at_line(&blocks, 5).unwrap();
+
+        assert!(std::ptr::eq(b3, b4));
+        assert!(std::ptr::eq(b4, b5));
+        assert_eq!(b3.language, "rust");
+
+        assert!(find_code_block_at_line(&blocks, 2).is_none());
+        assert!(find_code_block_at_line(&blocks, 6).is_none());
     }
 }

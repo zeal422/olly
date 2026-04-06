@@ -216,6 +216,15 @@ fn manual_reflow<'a>(logical_lines: &[Line<'a>], width: usize) -> Vec<Line<'a>> 
     result
 }
 
+/// Visual rows count for a single logical line at `width`.
+/// Uses `manual_reflow` on a single-line slice so the result matches production exactly.
+pub(super) fn reflow_row_count_for_line(line: &Line<'_>, width: usize) -> usize {
+    if width == 0 {
+        return 1;
+    }
+    manual_reflow(std::slice::from_ref(line), width).len()
+}
+
 pub(super) fn split_line_at_selection(
     line: &Line<'_>,
     sel_start: usize,
@@ -409,6 +418,7 @@ fn sidebar_action_hint(app: &App) -> String {
 
 #[cfg(test)]
 mod tests {
+    use super::reflow_row_count_for_line;
     use super::{
         calculate_scroll_position, manual_reflow, scroll_window, sidebar_action_hint,
         sidebar_line_with_marquee, split_line_at_selection, truncate_end, truncate_middle, Style,
@@ -424,6 +434,7 @@ mod tests {
     };
     use ratatui::layout::Rect;
     use ratatui::style::Modifier;
+    use ratatui::text::Line;
 
     fn app_for_sidebar_tests() -> App {
         let mut app = App::new(
@@ -674,5 +685,29 @@ mod tests {
         // Entire line should be reversed
         let all_reversed = result.iter().all(|s| s.style == selection_style);
         assert!(all_reversed);
+    }
+
+    #[test]
+    fn reflow_row_count_for_line_short_line_returns_one() {
+        let line = Line::from("hello");
+        assert_eq!(reflow_row_count_for_line(&line, 20), 1);
+    }
+
+    #[test]
+    fn reflow_row_count_for_line_wrapping_returns_correct_rows() {
+        let line = Line::from("a".repeat(30));
+        assert_eq!(reflow_row_count_for_line(&line, 10), 3);
+    }
+
+    #[test]
+    fn reflow_row_count_for_line_empty_returns_one() {
+        let line = Line::from("");
+        assert_eq!(reflow_row_count_for_line(&line, 20), 1);
+    }
+
+    #[test]
+    fn reflow_row_count_for_line_width_zero_returns_one() {
+        let line = Line::from("hello");
+        assert_eq!(reflow_row_count_for_line(&line, 0), 1);
     }
 }

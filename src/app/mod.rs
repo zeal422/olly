@@ -62,6 +62,7 @@ pub(crate) const COMMAND_SUGGESTIONS: &[&str] = &[
     "/model",
     "/url",
     "/tools",
+    "/diff",
 ];
 
 pub(crate) fn autocomplete_suggestions(

@@ -226,6 +226,15 @@ pub struct ThemePickerState {
     pub original: UiTheme,
 }
 
+/// A code block detected in chat, mapped to post-reflow visual line indices.
+#[derive(Debug, Clone, PartialEq)]
+pub struct CodeBlockRange {
+    pub start_visual_line: usize,
+    pub end_visual_line: usize,
+    pub raw_content: String,
+    pub language: String,
+}
+
 #[derive(Debug, Clone)]
 pub struct App {
     pub input: String,
@@ -263,6 +272,8 @@ pub struct App {
     pub chat_area: Option<ratatui::layout::Rect>,
     pub chat_visual_lines: Vec<(String, Option<Alignment>)>,
     pub chat_visual_lines_styled: Vec<ratatui::text::Line<'static>>,
+    pub code_blocks: Vec<CodeBlockRange>,
+    pub last_tool_output: Option<String>,
     pub chat_cached_version: u64,
     pub chat_content_version: u64,
     pub chat_last_render_width: u16,
@@ -351,6 +362,8 @@ impl App {
             chat_area: None,
             chat_visual_lines: Vec::new(),
             chat_visual_lines_styled: Vec::new(),
+            code_blocks: Vec::new(),
+            last_tool_output: None,
             chat_cached_version: 0,
             chat_content_version: 0,
             chat_last_render_width: 0,

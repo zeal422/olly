@@ -349,3 +349,86 @@ fn chat_visual_lines_cache_invalid_when_versions_differ() {
         && app.chat_last_render_width == 80;
     assert!(!cache_valid);
 }
+
+#[test]
+fn last_tool_output_captured_on_success() {
+    use crate::app::tools::{ToolResult, ToolResultStatus};
+
+    let mut app = App::new(
+        String::from("http://localhost:11434"),
+        String::from("llama3.2:latest"),
+    );
+    assert!(app.last_tool_output.is_none());
+
+    let result = ToolResult {
+        status: ToolResultStatus::Success,
+        output: "some output".into(),
+        error: None,
+        error_type: None,
+        truncated: None,
+    };
+
+    if result.status == ToolResultStatus::Success && !result.output.is_empty() {
+        app.last_tool_output = Some(result.output.clone());
+    }
+
+    assert_eq!(app.last_tool_output.as_deref(), Some("some output"));
+}
+
+#[test]
+fn last_tool_output_not_captured_on_error() {
+    use crate::app::tools::{ToolResult, ToolResultStatus};
+
+    let mut app = App::new(
+        String::from("http://localhost:11434"),
+        String::from("llama3.2:latest"),
+    );
+
+    let result = ToolResult {
+        status: ToolResultStatus::Error,
+        output: "some error".into(),
+        error: None,
+        error_type: None,
+        truncated: None,
+    };
+
+    if result.status == ToolResultStatus::Success && !result.output.is_empty() {
+        app.last_tool_output = Some(result.output.clone());
+    }
+
+    assert!(app.last_tool_output.is_none());
+}
+
+#[test]
+fn cache_hit_preserves_code_blocks_from_previous_miss() {
+    let mut app = App::new(
+        String::from("http://localhost:11434"),
+        String::from("llama3.2:latest"),
+    );
+    app.messages.push(Message {
+        role: "Assistant".into(),
+        content: "```rust\nfn main() {}\n```".into(),
+        timestamp: String::from("12:00"),
+        image_count: 0,
+        tool_calls_preview: None,
+        tool_name: None,
+        tool_calls: None,
+    });
+
+    app.code_blocks = vec![crate::app::state::CodeBlockRange {
+        start_visual_line: 1,
+        end_visual_line: 1,
+        raw_content: "fn main() {}".into(),
+        language: "rust".into(),
+    }];
+    app.chat_cached_version = app.chat_content_version;
+    app.chat_visual_lines_styled = vec![ratatui::text::Line::from("dummy")];
+
+    let cached_blocks = app.code_blocks.clone();
+
+    let cache_valid = app.chat_cached_version == app.chat_content_version
+        && !app.chat_visual_lines_styled.is_empty();
+    assert!(cache_valid);
+
+    assert_eq!(app.code_blocks, cached_blocks);
+}

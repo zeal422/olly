@@ -11,3 +11,5 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 cargo test --all-targets --all-features
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+exit 0
