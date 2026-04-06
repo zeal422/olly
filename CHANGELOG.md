@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project follows Semantic Versioning.
 
+## [0.0.21] - 2026-04-06
+
+### Fixed
+- **Code block selection now works**: Single click on a code block copies the entire block to clipboard (with toast). Click-and-drag inside a code block now starts text selection normally, allowing partial code copy via Ctrl+C. Previously, clicking a code block immediately copied and returned, bypassing the selection mechanism entirely.
+
+### Technical
+- Moved clipboard copy from `handle_start_selection` (mouse-down) to `handle_end_selection` (mouse-up).
+- Added click-vs-drag detection: `anchor == current` triggers block copy, `anchor != current` preserves normal drag-select flow.
+
 ## [0.0.20] - 2026-04-05
 
 ### Added

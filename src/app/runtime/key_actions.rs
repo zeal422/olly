@@ -322,36 +322,8 @@ fn handle_copy(app: &mut App) {
 }
 
 fn handle_start_selection(app: &mut App, mouse: MouseEvent) {
-    // First, check if click is on a code block
-    if let Some(pos) = mouse_to_chat_visual_position(app, mouse) {
-        if let Some(block) = find_code_block_at_line(&app.code_blocks, pos.0) {
-            // Copy code block to clipboard
-            match ClipboardContext::new() {
-                Ok(mut ctx) => {
-                    let lang_label = if block.language.is_empty() {
-                        "code".to_string()
-                    } else {
-                        block.language.clone()
-                    };
-                    let line_count = block.raw_content.lines().count();
-                    if let Err(e) = ctx.set_contents(block.raw_content.clone()) {
-                        app.set_toast(ToastLevel::Error, format!("Failed to copy: {e}"));
-                    } else {
-                        app.set_toast(
-                            ToastLevel::Success,
-                            format!("Copied {lang_label} code block ({line_count} lines)"),
-                        );
-                    }
-                }
-                Err(_) => {
-                    app.set_toast(ToastLevel::Error, "Failed to copy to clipboard");
-                }
-            }
-            return; // Don't start selection
-        }
-    }
-
-    // Normal text selection behavior
+    // Always initialize selection state, even inside code blocks.
+    // This allows drag-to-select to work normally on code block content.
     if let Some(pos) = mouse_to_chat_visual_position(app, mouse) {
         app.chat_selection_anchor = Some(pos);
         app.chat_selection_current = Some(pos);
@@ -398,8 +370,53 @@ fn handle_update_selection(app: &mut App, mouse: MouseEvent) {
 }
 
 fn handle_end_selection(app: &mut App) {
+    // Check if this was a single click (anchor == current) on a code block
+    let click_info = if let (Some(anchor), Some(current)) =
+        (app.chat_selection_anchor, app.chat_selection_current)
+    {
+        if anchor.0 == current.0 && anchor.1 == current.1 {
+            find_code_block_at_line(&app.code_blocks, anchor.0).map(|b| {
+                (
+                    b.start_visual_line,
+                    b.raw_content.clone(),
+                    b.language.clone(),
+                )
+            })
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
+    // Clear selection state
     app.is_selecting = false;
     app.auto_scroll_direction = None;
+
+    // Copy after clearing selection (avoids borrow conflicts)
+    if let Some((_, raw_content, language)) = click_info {
+        let lang_label = if language.is_empty() {
+            "code".to_string()
+        } else {
+            language
+        };
+        let line_count = raw_content.lines().count();
+        match ClipboardContext::new() {
+            Ok(mut ctx) => {
+                if let Err(e) = ctx.set_contents(raw_content.clone()) {
+                    app.set_toast(ToastLevel::Error, format!("Failed to copy: {e}"));
+                } else {
+                    app.set_toast(
+                        ToastLevel::Success,
+                        format!("Copied {lang_label} code block ({line_count} lines)"),
+                    );
+                }
+            }
+            Err(_) => {
+                app.set_toast(ToastLevel::Error, "Failed to copy to clipboard");
+            }
+        }
+    }
 }
 
 fn handle_extend_selection(app: &mut App, mouse: MouseEvent) {
@@ -476,7 +493,8 @@ fn extract_selection_text(
 mod tests {
     use super::{
         apply_mouse_wheel_scroll, extract_selection_text, find_code_block_at_line,
-        handle_start_selection, mouse_to_chat_visual_position, resolve_scroll_route, ScrollRoute,
+        handle_end_selection, handle_start_selection, handle_update_selection,
+        mouse_to_chat_visual_position, resolve_scroll_route, ScrollRoute,
     };
     use crate::app::state::CodeBlockRange;
     use crate::app::{App, FocusPane};
@@ -886,7 +904,7 @@ mod tests {
     }
 
     #[test]
-    fn handle_start_selection_triggers_toast_on_code_block_click() {
+    fn click_on_code_block_copies_to_clipboard() {
         let mut app = App::new(
             String::from("http://localhost:11434"),
             String::from("llama3.2:latest"),
@@ -900,14 +918,19 @@ mod tests {
             language: "rust".into(),
         }];
 
-        let mouse = crossterm::event::MouseEvent {
+        let mouse_down = crossterm::event::MouseEvent {
             kind: crossterm::event::MouseEventKind::Down(crossterm::event::MouseButton::Left),
-            column: 5, // Fixed: within "some code" text (9 chars wide, area.x = 0)
+            column: 5, // Within "some code" text (9 chars wide, area.x = 0)
             row: 3,    // Inside block range
             modifiers: crossterm::event::KeyModifiers::NONE,
         };
 
-        handle_start_selection(&mut app, mouse);
+        // MouseDown initializes selection
+        handle_start_selection(&mut app, mouse_down);
+        assert!(app.is_selecting);
+
+        // MouseUp triggers copy for single click on code block
+        handle_end_selection(&mut app);
 
         // Toast should be set (either success or error depending on clipboard availability)
         assert!(app.toast.is_some());
@@ -917,6 +940,48 @@ mod tests {
             "Expected copy toast, got: {}",
             app.toast.as_ref().unwrap().message
         );
+    }
+
+    #[test]
+    fn drag_inside_code_block_starts_selection_no_immediate_copy() {
+        let mut app = App::new(
+            String::from("http://localhost:11434"),
+            String::from("llama3.2:latest"),
+        );
+        app.chat_area = Some(ratatui::layout::Rect::new(0, 0, 80, 20));
+        app.chat_visual_lines = vec![(String::from("some code"), Some(Alignment::Left)); 10];
+        app.code_blocks = vec![CodeBlockRange {
+            start_visual_line: 2,
+            end_visual_line: 5,
+            raw_content: "fn main() {}\nlet x = 1;".into(),
+            language: "rust".into(),
+        }];
+
+        // MouseDown at row 3
+        let mouse_down = crossterm::event::MouseEvent {
+            kind: crossterm::event::MouseEventKind::Down(crossterm::event::MouseButton::Left),
+            column: 5,
+            row: 3,
+            modifiers: crossterm::event::KeyModifiers::NONE,
+        };
+        handle_start_selection(&mut app, mouse_down);
+        assert!(app.is_selecting);
+
+        // MouseMove to row 4 (drag)
+        let mouse_move = crossterm::event::MouseEvent {
+            kind: crossterm::event::MouseEventKind::Moved,
+            column: 5,
+            row: 4,
+            modifiers: crossterm::event::KeyModifiers::NONE,
+        };
+        handle_update_selection(&mut app, mouse_move);
+        assert_eq!(app.chat_selection_current, Some((4, 5)));
+
+        // MouseUp — since anchor != current, no copy should happen
+        handle_end_selection(&mut app);
+        assert!(!app.is_selecting);
+        // No toast should be set for drag (no code block copy)
+        assert!(app.toast.is_none());
     }
 
     #[test]
